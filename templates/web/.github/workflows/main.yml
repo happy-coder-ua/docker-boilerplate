@@ -20,26 +20,17 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    if: >-
-      ${{
-        secrets.SERVER_HOST != '' &&
-        secrets.SERVER_USER != '' &&
-        secrets.SSH_PRIVATE_KEY != '' &&
-        secrets.PROJECT_PATH != '' &&
-        secrets.PROJECT_NAME != '' &&
-        secrets.DOMAIN_NAME != '' &&
-        secrets.TRAEFIK_NETWORK != ''
-      }}
+    if: secrets.SERVER_HOST != '' && secrets.SERVER_USER != '' && secrets.SSH_PRIVATE_KEY != '' && secrets.PROJECT_PATH != '' && secrets.PROJECT_NAME != '' && secrets.DOMAIN_NAME != '' && secrets.TRAEFIK_NETWORK != ''
+    env:
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
+      PROJECT_NAME: ${{ secrets.PROJECT_NAME }}
+      DOMAIN_NAME: ${{ secrets.DOMAIN_NAME }}
+      TRAEFIK_NETWORK: ${{ secrets.TRAEFIK_NETWORK }}
     steps:
       - name: Validate required secrets
-        env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
-          PROJECT_NAME: ${{ secrets.PROJECT_NAME }}
-          DOMAIN_NAME: ${{ secrets.DOMAIN_NAME }}
-          TRAEFIK_NETWORK: ${{ secrets.TRAEFIK_NETWORK }}
         run: |
           set -euo pipefail
           missing=0
@@ -56,18 +47,16 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ env.SERVER_HOST }}
+          username: ${{ env.SERVER_USER }}
+          key: ${{ env.SSH_PRIVATE_KEY }}
           script: |
-            cd ${{ secrets.PROJECT_PATH }}
+            cd "$PROJECT_PATH"
             git pull origin main
             # Create/Update .env from secrets
-            echo "PROJECT_NAME=${{ secrets.PROJECT_NAME }}" > .env
-            echo "DOMAIN_NAME=${{ secrets.DOMAIN_NAME }}" >> .env
-            echo "TRAEFIK_NETWORK=${{ secrets.TRAEFIK_NETWORK }}" >> .env
-            # You can add more variables here:
-            # echo "ANOTHER_VAR=${{ secrets.ANOTHER_VAR }}" >> .env
+            echo "PROJECT_NAME=$PROJECT_NAME" > .env
+            echo "DOMAIN_NAME=$DOMAIN_NAME" >> .env
+            echo "TRAEFIK_NETWORK=$TRAEFIK_NETWORK" >> .env
             
             docker compose up -d --build
             docker image prune -f
