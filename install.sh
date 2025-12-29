@@ -269,6 +269,14 @@ setup_web() {
         echo -e "${YELLOW}Warning: Could not find next.config.{js,mjs,ts}. Please manually add 'output: \"standalone\"' to your config.${NC}"
     fi
     
+    # Enable Turbopack for local development
+    if [ "$ENV_TYPE" == "local" ]; then
+        if [ -f "$folder_name/package.json" ]; then
+            echo -e "${BLUE}>>> Enabling Turbopack for local development...${NC}"
+            sed -i 's/"dev": "next dev"/"dev": "next dev --turbo"/' "$folder_name/package.json"
+        fi
+    fi
+    
     cd "$folder_name" || exit
     
     cp .env.example .env
