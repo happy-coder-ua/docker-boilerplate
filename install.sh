@@ -63,6 +63,38 @@ if ! command -v docker &> /dev/null; then
     fi
 fi
 
+# Interactive Environment Selection
+ENV_TYPE="local"
+ask_environment() {
+    clear
+    echo -e "${BLUE}=============================================${NC}"
+    echo -e "${BLUE}   Docker Project Generator v1.2.0           ${NC}"
+    echo -e "${BLUE}=============================================${NC}"
+    echo -e "Where are you running this script?"
+    echo -e "1) ${GREEN}Local Computer${NC} (Development)"
+    echo -e "2) ${RED}VPS Server${NC} (Production)"
+    echo -e "---------------------------------------------"
+    read -p "Select option [1-2]: " env_choice
+    
+    case $env_choice in
+        1)
+            ENV_TYPE="local"
+            echo -e "${GREEN}>>> Mode: Local Development${NC}"
+            ;;
+        2)
+            ENV_TYPE="vps"
+            echo -e "${RED}>>> Mode: VPS Production${NC}"
+            ;;
+        *)
+            echo -e "${YELLOW}Invalid option. Defaulting to Local.${NC}"
+            ENV_TYPE="local"
+            ;;
+    esac
+    echo ""
+}
+
+ask_environment
+
 # Function to setup Traefik
 setup_traefik() {
     echo -e "\n${BLUE}>>> Generating Global Proxy (Traefik)...${NC}"
@@ -160,9 +192,14 @@ setup_web() {
     echo -e "\n${BLUE}>>> Generating New Web Project...${NC}"
     
     read -p "Enter project name (folder name): " folder_name
-    echo -e "Enter the domain for your LOCAL environment (e.g., project.docker.localhost)."
-    echo -e "For production (VPS), you will configure the domain in GitHub Secrets/GitLab Variables."
-    read -p "Local Domain: " domain_name
+    
+    if [ "$ENV_TYPE" == "local" ]; then
+        echo -e "Enter the domain for your LOCAL environment (e.g., ${folder_name}.docker.localhost)."
+        read -p "Local Domain [${folder_name}.docker.localhost]: " domain_name
+        [ -z "$domain_name" ] && domain_name="${folder_name}.docker.localhost"
+    else
+        read -p "Enter the PRODUCTION domain (e.g., example.com): " domain_name
+    fi
     
     if [ -d "$folder_name" ]; then
         read -p "Directory $folder_name already exists. Do you want to remove it and continue? (y/N): " confirm
@@ -213,19 +250,23 @@ setup_web() {
     cp -r "$TEMPLATES_DIR/web/.github" "$folder_name/" 2>/dev/null || true
     cp "$TEMPLATES_DIR/web/.gitlab-ci.yml" "$folder_name/" 2>/dev/null || true
     
-    # Configure next.config.js/mjs for standalone output (Required for Dockerfile)
-    CONFIG_FILE="$folder_name/next.config.js"
-    [ -f "$folder_name/next.config.mjs" ] && CONFIG_FILE="$folder_name/next.config.mjs"
+    # Configure next.config.js/mjs/ts for standalone output (Required for Dockerfile)
+    CONFIG_FILE=""
+    if [ -f "$folder_name/next.config.js" ]; then CONFIG_FILE="$folder_name/next.config.js"; fi
+    if [ -f "$folder_name/next.config.mjs" ]; then CONFIG_FILE="$folder_name/next.config.mjs"; fi
+    if [ -f "$folder_name/next.config.ts" ]; then CONFIG_FILE="$folder_name/next.config.ts"; fi
     
-    if [ -f "$CONFIG_FILE" ]; then
+    if [ -n "$CONFIG_FILE" ]; then
         # Check if output: 'standalone' is already there
         if ! grep -q "standalone" "$CONFIG_FILE"; then
             echo -e "${BLUE}>>> Configuring 'output: standalone' in $CONFIG_FILE...${NC}"
             # Insert output: 'standalone' into the config object
-            # This is a bit hacky with sed, but works for standard configs
-            # We look for "nextConfig = {" or "const nextConfig = {" and append the line
-            sed -i '/nextConfig = {/a \ \ output: "standalone",' "$CONFIG_FILE"
+            # We look for "nextConfig = {" or "const nextConfig: NextConfig = {" and append the line
+            # The regex matches: nextConfig followed by any chars, then =, then any chars, then {
+            sed -i '/nextConfig.*=.*{/a \ \ output: "standalone",' "$CONFIG_FILE"
         fi
+    else
+        echo -e "${YELLOW}Warning: Could not find next.config.{js,mjs,ts}. Please manually add 'output: \"standalone\"' to your config.${NC}"
     fi
     
     cd "$folder_name" || exit
@@ -243,14 +284,21 @@ setup_web() {
     
     # Update CI/CD paths
     echo -e "\n${BLUE}>>> CI/CD Configuration${NC}"
-    echo "Since you are likely running this locally, we need to know where the project will be on your VPS."
-    read -p "Enter the absolute path on VPS (e.g., /root/projects/$folder_name): " remote_path
     
-    if [ -z "$remote_path" ]; then
-        remote_path="/root/projects/$folder_name"
-        echo -e "Using default: $remote_path"
+    if [ "$ENV_TYPE" == "local" ]; then
+        echo "Since you are running locally, we need to know where the project will be on your VPS."
+        read -p "Enter the absolute path on VPS (e.g., /root/projects/$folder_name): " remote_path
+        
+        if [ -z "$remote_path" ]; then
+            remote_path="/root/projects/$folder_name"
+            echo -e "Using default: $remote_path"
+        fi
+        PROJECT_PATH="$remote_path"
+    else
+        # On VPS, the current path is the project path
+        PROJECT_PATH=$(pwd)
+        echo -e "Using current path for CI/CD: $PROJECT_PATH"
     fi
-    PROJECT_PATH="$remote_path"
     
     # Update GitHub Actions
     if [ -f ".github/workflows/main.yml" ]; then
@@ -279,7 +327,13 @@ setup_bot() {
     echo -e "\n${BLUE}>>> Generating New Bot Project...${NC}"
     read -p "Enter project name (folder name): " folder_name
     read -p "Enter Bot Token: " bot_token
-    read -p "Enter Domain (optional, press enter to skip): " domain_name
+    
+    if [ "$ENV_TYPE" == "local" ]; then
+        echo -e "Enter the domain for your LOCAL environment (optional, e.g., ${folder_name}.docker.localhost)."
+        read -p "Local Domain: " domain_name
+    else
+        read -p "Enter the PRODUCTION domain (optional, e.g., bot.example.com): " domain_name
+    fi
     
     if [ -d "$folder_name" ]; then
         echo -e "${RED}Directory $folder_name already exists. Please choose another name.${NC}"
@@ -308,7 +362,20 @@ setup_bot() {
     sed -i "s/container_name: my-bot-project/container_name: $folder_name/" docker-compose.yml
     
     # Update CI/CD paths
-    PROJECT_PATH=$(pwd)
+    echo -e "\n${BLUE}>>> CI/CD Configuration${NC}"
+    
+    if [ "$ENV_TYPE" == "local" ]; then
+        echo "Since you are running locally, we need to know where the project will be on your VPS."
+        read -p "Enter the absolute path on VPS (e.g., /root/projects/$folder_name): " remote_path
+        if [ -z "$remote_path" ]; then
+            remote_path="/root/projects/$folder_name"
+            echo -e "Using default: $remote_path"
+        fi
+        PROJECT_PATH="$remote_path"
+    else
+        PROJECT_PATH=$(pwd)
+        echo -e "Using current path for CI/CD: $PROJECT_PATH"
+    fi
     
     # Update GitHub Actions
     if [ -f ".github/workflows/main.yml" ]; then
@@ -333,26 +400,22 @@ setup_bot() {
 }
 
 # Main Menu
-PS3='Select project type to generate: '
-options=("Global Proxy (Traefik)" "Web Project (Next.js)" "Telegram Bot" "Quit")
-select opt in "${options[@]}"
-do
+while true; do
+    echo -e "\n${BLUE}=============================================${NC}"
+    echo -e "${BLUE}   Main Menu                                 ${NC}"
+    echo -e "${BLUE}=============================================${NC}"
+    echo -e "1) ${GREEN}Global Proxy (Traefik)${NC}"
+    echo -e "2) ${GREEN}Web Project (Next.js)${NC}"
+    echo -e "3) ${GREEN}Telegram Bot${NC}"
+    echo -e "4) ${RED}Quit${NC}"
+    echo -e "---------------------------------------------"
+    read -p "Select option [1-4]: " opt
+    
     case $opt in
-        "Global Proxy (Traefik)")
-            setup_traefik
-            break
-            ;;
-        "Web Project (Next.js)")
-            setup_web
-            break
-            ;;
-        "Telegram Bot")
-            setup_bot
-            break
-            ;;
-        "Quit")
-            break
-            ;;
-        *) echo "invalid option $REPLY";;
+        1) setup_traefik; break ;;
+        2) setup_web; break ;;
+        3) setup_bot; break ;;
+        4) echo "Exiting..."; exit 0 ;;
+        *) echo -e "${RED}Invalid option. Please try again.${NC}" ;;
     esac
 done
