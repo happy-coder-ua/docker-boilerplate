@@ -159,11 +159,6 @@ setup_traefik() {
 setup_web() {
     echo -e "\n${BLUE}>>> Generating New Web Project...${NC}"
     
-    echo "Choose generation method:"
-    echo "1) Standard Template (Fast, Pre-configured)"
-    echo "2) Generate Latest Next.js (npx create-next-app@latest)"
-    read -p "Select option (1/2): " web_choice
-
     read -p "Enter project name (folder name): " folder_name
     read -p "Enter domain name (e.g., example.com): " domain_name
     
@@ -172,51 +167,45 @@ setup_web() {
         return
     fi
 
-    if [[ "$web_choice" == "2" ]]; then
-        echo -e "${BLUE}>>> Running create-next-app@latest via Docker...${NC}"
-        echo -e "You will be prompted to choose Next.js options."
+    echo -e "${BLUE}>>> Running create-next-app@latest via Docker...${NC}"
+    echo -e "You will be prompted to choose Next.js options."
+    
+    # Run create-next-app in a container
+    # We map the current directory to /work and run the command
+    # We use -it to allow interactive prompts
+    docker run --rm -it -v "$(pwd):/work" -w /work node:lts-alpine \
+        npx create-next-app@latest "$folder_name"
         
-        # Run create-next-app in a container
-        # We map the current directory to /work and run the command
-        # We use -it to allow interactive prompts
-        docker run --rm -it -v "$(pwd):/work" -w /work node:lts-alpine \
-            npx create-next-app@latest "$folder_name"
-            
-        if [ ! -d "$folder_name" ]; then
-             echo -e "${RED}Project generation failed or was cancelled.${NC}"
-             return
-        fi
-        
-        echo -e "${BLUE}>>> Applying Docker boilerplate configuration...${NC}"
-        
-        # Copy Docker-related files from template
-        cp "$TEMPLATES_DIR/web/Dockerfile" "$folder_name/"
-        cp "$TEMPLATES_DIR/web/docker-compose.yml" "$folder_name/"
-        cp "$TEMPLATES_DIR/web/.env.example" "$folder_name/"
-        cp -r "$TEMPLATES_DIR/web/.github" "$folder_name/" 2>/dev/null || true
-        cp "$TEMPLATES_DIR/web/.gitlab-ci.yml" "$folder_name/" 2>/dev/null || true
-        
-        # Configure next.config.js/mjs for standalone output (Required for Dockerfile)
-        CONFIG_FILE="$folder_name/next.config.js"
-        [ -f "$folder_name/next.config.mjs" ] && CONFIG_FILE="$folder_name/next.config.mjs"
-        
-        if [ -f "$CONFIG_FILE" ]; then
-            # Check if output: 'standalone' is already there
-            if ! grep -q "standalone" "$CONFIG_FILE"; then
-                echo -e "${BLUE}>>> Configuring 'output: standalone' in $CONFIG_FILE...${NC}"
-                # Insert output: 'standalone' into the config object
-                # This is a bit hacky with sed, but works for standard configs
-                # We look for "nextConfig = {" or "const nextConfig = {" and append the line
-                sed -i '/nextConfig = {/a \ \ output: "standalone",' "$CONFIG_FILE"
-            fi
-        fi
-        
-        cd "$folder_name" || exit
-    else
-        # Standard Template
-        cp -r "$TEMPLATES_DIR/web" "$folder_name"
-        cd "$folder_name" || exit
+    if [ ! -d "$folder_name" ]; then
+            echo -e "${RED}Project generation failed or was cancelled.${NC}"
+            return
     fi
+    
+    echo -e "${BLUE}>>> Applying Docker boilerplate configuration...${NC}"
+    
+    # Copy Docker-related files from template
+    cp "$TEMPLATES_DIR/web/Dockerfile" "$folder_name/"
+    cp "$TEMPLATES_DIR/web/docker-compose.yml" "$folder_name/"
+    cp "$TEMPLATES_DIR/web/.env.example" "$folder_name/"
+    cp -r "$TEMPLATES_DIR/web/.github" "$folder_name/" 2>/dev/null || true
+    cp "$TEMPLATES_DIR/web/.gitlab-ci.yml" "$folder_name/" 2>/dev/null || true
+    
+    # Configure next.config.js/mjs for standalone output (Required for Dockerfile)
+    CONFIG_FILE="$folder_name/next.config.js"
+    [ -f "$folder_name/next.config.mjs" ] && CONFIG_FILE="$folder_name/next.config.mjs"
+    
+    if [ -f "$CONFIG_FILE" ]; then
+        # Check if output: 'standalone' is already there
+        if ! grep -q "standalone" "$CONFIG_FILE"; then
+            echo -e "${BLUE}>>> Configuring 'output: standalone' in $CONFIG_FILE...${NC}"
+            # Insert output: 'standalone' into the config object
+            # This is a bit hacky with sed, but works for standard configs
+            # We look for "nextConfig = {" or "const nextConfig = {" and append the line
+            sed -i '/nextConfig = {/a \ \ output: "standalone",' "$CONFIG_FILE"
+        fi
+    fi
+    
+    cd "$folder_name" || exit
     
     cp .env.example .env
     sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=$domain_name|" .env
