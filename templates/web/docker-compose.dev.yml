@@ -1,0 +1,20 @@
+services:
+  web:
+    build:
+      context: .
+      target: deps
+    container_name: my-web-project-dev
+    command: npm run dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+    networks:
+      - proxy-public
+
+networks:
+  proxy-public:
+    external: true

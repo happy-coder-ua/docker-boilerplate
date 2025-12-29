@@ -12,6 +12,80 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Interactive Menu Function
+interactive_menu() {
+    local title="$1"
+    shift
+    local options=("$@")
+    local cur=0
+    local count=${#options[@]}
+    local index=0
+    local esc=$(echo -en "\033")
+    local key=""
+
+    # Hide cursor
+    echo -en "\033[?25l"
+
+    # Trap to ensure cursor is shown on exit
+    trap "echo -en '\033[?25h'; exit" INT TERM EXIT
+
+    while true; do
+        # Clear screen for menu
+        # clear # Optional: uncomment if you want full screen clear
+        
+        # Move cursor to top left (if clearing) or just print
+        # For a simple inline menu that redraws, we can use tput or ANSI codes to move up.
+        # But to keep it simple and robust, let's just clear the screen for the menu part.
+        clear 
+
+        echo -e "${BLUE}=============================================${NC}"
+        echo -e "${BLUE}   $title${NC}"
+        echo -e "${BLUE}=============================================${NC}"
+        
+        index=0
+        for o in "${options[@]}"; do
+            if [ "$index" == "$cur" ]; then
+                echo -e " > ${GREEN}$o${NC}"
+            else
+                echo -e "   $o"
+            fi
+            index=$((index + 1))
+        done
+        echo -e "---------------------------------------------"
+        echo -e "Use ${BLUE}UP/DOWN${NC} arrows to navigate, ${GREEN}ENTER${NC} to select."
+
+        read -rsn1 key # Read 1 character
+
+        if [[ $key == $esc ]]; then
+            read -rsn2 key # Read 2 more chars
+            if [[ $key == "[A" ]]; then # Up arrow
+                cur=$((cur - 1))
+                [ "$cur" -lt 0 ] && cur=$((count - 1))
+            elif [[ $key == "[B" ]]; then # Down arrow
+                cur=$((cur + 1))
+                [ "$cur" -ge "$count" ] && cur=0
+            fi
+        elif [[ $key == "" ]]; then # Enter key
+            break
+        fi
+    done
+
+    # Show cursor again
+    echo -en "\033[?25h"
+    # Remove trap
+    trap - INT TERM EXIT
+    
+    return $cur
+}
+
+# Helper for Yes/No questions
+ask_yes_no() {
+    local question="$1"
+    local options=("Yes" "No")
+    interactive_menu "$question" "${options[@]}"
+    return $?
+}
+
 # Determine mode (Local vs Remote)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 if [ -d "$SCRIPT_DIR/templates" ]; then
@@ -50,8 +124,8 @@ echo ""
 # Check Docker
 if ! command -v docker &> /dev/null; then
     echo -e "${RED}Docker is not installed.${NC}"
-    read -p "Do you want to install Docker automatically? (y/n): " install_choice
-    if [[ "$install_choice" =~ ^[Yy]$ ]]; then
+    ask_yes_no "Do you want to install Docker automatically?"
+    if [ $? -eq 0 ]; then
         echo -e "${BLUE}>>> Installing Docker...${NC}"
         curl -fsSL https://get.docker.com -o get-docker.sh
         sh get-docker.sh
@@ -66,30 +140,17 @@ fi
 # Interactive Environment Selection
 ENV_TYPE="local"
 ask_environment() {
-    clear
-    echo -e "${BLUE}=============================================${NC}"
-    echo -e "${BLUE}   Docker Project Generator v1.2.0           ${NC}"
-    echo -e "${BLUE}=============================================${NC}"
-    echo -e "Where are you running this script?"
-    echo -e "1) ${GREEN}Local Computer${NC} (Development)"
-    echo -e "2) ${RED}VPS Server${NC} (Production)"
-    echo -e "---------------------------------------------"
-    read -p "Select option [1-2]: " env_choice
-    
-    case $env_choice in
-        1)
-            ENV_TYPE="local"
-            echo -e "${GREEN}>>> Mode: Local Development${NC}"
-            ;;
-        2)
-            ENV_TYPE="vps"
-            echo -e "${RED}>>> Mode: VPS Production${NC}"
-            ;;
-        *)
-            echo -e "${YELLOW}Invalid option. Defaulting to Local.${NC}"
-            ENV_TYPE="local"
-            ;;
-    esac
+    local options=("Local Computer (Development)" "VPS Server (Production)")
+    interactive_menu "Docker Project Generator v1.2.0" "${options[@]}"
+    local choice=$?
+
+    if [ $choice -eq 0 ]; then
+        ENV_TYPE="local"
+        echo -e "${GREEN}>>> Mode: Local Development${NC}"
+    else
+        ENV_TYPE="vps"
+        echo -e "${RED}>>> Mode: VPS Production${NC}"
+    fi
     echo ""
 }
 
@@ -102,8 +163,8 @@ setup_traefik() {
     TARGET_DIR="global-proxy"
     if [ -d "$TARGET_DIR" ]; then
         echo -e "${RED}Directory '$TARGET_DIR' already exists.${NC}"
-        read -p "Do you want to overwrite it? (y/n): " overwrite
-        if [[ "$overwrite" =~ ^[Yy]$ ]]; then
+        ask_yes_no "Do you want to overwrite it?"
+        if [ $? -eq 0 ]; then
             if [ -f "$TARGET_DIR/docker-compose.yml" ]; then
                 echo -e "${BLUE}Stopping running containers...${NC}"
                 (cd "$TARGET_DIR" && docker compose down 2>/dev/null || true)
@@ -129,8 +190,8 @@ setup_traefik() {
     chmod 600 traefik/acme.json
 
     # Dashboard Setup
-    read -p "Do you want to enable the Traefik Dashboard with Basic Auth? (y/n): " enable_dashboard
-    if [[ "$enable_dashboard" =~ ^[Yy]$ ]]; then
+    ask_yes_no "Do you want to enable the Traefik Dashboard with Basic Auth?"
+    if [ $? -eq 0 ]; then
         read -p "Enter Dashboard Domain (e.g. traefik.yourdomain.com): " dashboard_domain
         read -p "Enter Dashboard Username: " dashboard_user
         read -s -p "Enter Dashboard Password: " dashboard_pass
@@ -175,6 +236,16 @@ setup_traefik() {
             }
             print $0
         }' docker-compose.yml > docker-compose.tmp && mv docker-compose.tmp docker-compose.yml
+        
+        enable_dashboard="y" # Set for later use
+    else
+        enable_dashboard="n"
+    fi
+    
+    # Ensure proxy-public network exists
+    if ! docker network inspect proxy-public >/dev/null 2>&1; then
+        echo -e "${BLUE}>>> Creating external network 'proxy-public'...${NC}"
+        docker network create proxy-public
     fi
     
     echo -e "${GREEN}Success!${NC}"
@@ -193,17 +264,50 @@ setup_web() {
     
     read -p "Enter project name (folder name): " folder_name
     
+    traefik_network="proxy-public"
     if [ "$ENV_TYPE" == "local" ]; then
         echo -e "Enter the domain for your LOCAL environment (e.g., ${folder_name}.docker.localhost)."
         read -p "Local Domain [${folder_name}.docker.localhost]: " domain_name
         [ -z "$domain_name" ] && domain_name="${folder_name}.docker.localhost"
+        
+        # Network Selection
+        networks=()
+        while IFS= read -r line; do
+            [ -n "$line" ] && networks+=("$line")
+        done < <(docker network ls --format "{{.Name}}" | grep -v "bridge\|host\|none")
+
+        # Check if proxy-public exists in the list
+        local found_proxy=0
+        for n in "${networks[@]}"; do
+            if [[ "$n" == "proxy-public" ]]; then
+                found_proxy=1
+                break
+            fi
+        done
+        
+        if [ $found_proxy -eq 0 ]; then
+            networks+=("proxy-public (Create new)")
+        fi
+        networks+=("Manual Input")
+        
+        interactive_menu "Select Docker Network for Traefik" "${networks[@]}"
+        local net_choice=$?
+        local selected="${networks[$net_choice]}"
+        
+        if [[ "$selected" == "Manual Input" ]]; then
+             read -p "Enter Docker Network Name: " traefik_network
+        elif [[ "$selected" == "proxy-public (Create new)" ]]; then
+             traefik_network="proxy-public"
+        else
+             traefik_network="$selected"
+        fi
     else
         read -p "Enter the PRODUCTION domain (e.g., example.com): " domain_name
     fi
     
     if [ -d "$folder_name" ]; then
-        read -p "Directory $folder_name already exists. Do you want to remove it and continue? (y/N): " confirm
-        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        ask_yes_no "Directory $folder_name already exists. Remove it and continue?"
+        if [ $? -eq 0 ]; then
             echo -e "${YELLOW}Removing existing directory...${NC}"
             # Use Docker to remove it in case it's owned by root from a previous failed run
             docker run --rm -v "$(pwd):/work" -w /work node:lts-alpine rm -rf "$folder_name"
@@ -275,6 +379,25 @@ setup_web() {
             echo -e "${BLUE}>>> Enabling Turbopack for local development...${NC}"
             sed -i 's/"dev": "next dev"/"dev": "next dev --turbo"/' "$folder_name/package.json"
         fi
+        
+        # Copy docker-compose.dev.yml for local development
+        echo -e "${BLUE}>>> Copying docker-compose.dev.yml for local development...${NC}"
+        cp "$TEMPLATES_DIR/web/docker-compose.dev.yml" "$folder_name/"
+    fi
+    
+    # Ensure proxy-public network exists (in case user skipped Traefik setup)
+    # If user specified a custom network, we assume it exists or they will create it.
+    # But if it's the default 'proxy-public', we create it if missing.
+    if [ "$traefik_network" == "proxy-public" ]; then
+        if ! docker network inspect proxy-public >/dev/null 2>&1; then
+            echo -e "${BLUE}>>> Creating external network 'proxy-public'...${NC}"
+            docker network create proxy-public
+        fi
+    else
+        # Check if custom network exists
+        if ! docker network inspect "$traefik_network" >/dev/null 2>&1; then
+             echo -e "${YELLOW}Warning: Network '$traefik_network' does not exist. You may need to create it manually.${NC}"
+        fi
     fi
     
     cd "$folder_name" || exit
@@ -282,8 +405,19 @@ setup_web() {
     cp .env.example .env
     sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=$domain_name|" .env
     
+    # Update network name in docker-compose files
+    if [ "$traefik_network" != "proxy-public" ]; then
+        sed -i "s/proxy-public/$traefik_network/g" docker-compose.yml
+        if [ -f "docker-compose.dev.yml" ]; then
+            sed -i "s/proxy-public/$traefik_network/g" docker-compose.dev.yml
+        fi
+    fi
+    
     # Update container name to be unique
     sed -i "s/container_name: my-web-project/container_name: $folder_name/" docker-compose.yml
+    if [ -f "docker-compose.dev.yml" ]; then
+        sed -i "s/container_name: my-web-project-dev/container_name: ${folder_name}-dev/" docker-compose.dev.yml
+    fi
     
     # Update router names to be unique (sanitize name)
     router_name=$(echo "$folder_name" | tr -cd '[:alnum:]-')
@@ -336,9 +470,42 @@ setup_bot() {
     read -p "Enter project name (folder name): " folder_name
     read -p "Enter Bot Token: " bot_token
     
+    traefik_network="proxy-public"
     if [ "$ENV_TYPE" == "local" ]; then
         echo -e "Enter the domain for your LOCAL environment (optional, e.g., ${folder_name}.docker.localhost)."
         read -p "Local Domain: " domain_name
+        
+        # Network Selection
+        networks=()
+        while IFS= read -r line; do
+            [ -n "$line" ] && networks+=("$line")
+        done < <(docker network ls --format "{{.Name}}" | grep -v "bridge\|host\|none")
+
+        # Check if proxy-public exists in the list
+        local found_proxy=0
+        for n in "${networks[@]}"; do
+            if [[ "$n" == "proxy-public" ]]; then
+                found_proxy=1
+                break
+            fi
+        done
+        
+        if [ $found_proxy -eq 0 ]; then
+            networks+=("proxy-public (Create new)")
+        fi
+        networks+=("Manual Input")
+        
+        interactive_menu "Select Docker Network for Traefik" "${networks[@]}"
+        local net_choice=$?
+        local selected="${networks[$net_choice]}"
+        
+        if [[ "$selected" == "Manual Input" ]]; then
+             read -p "Enter Docker Network Name: " traefik_network
+        elif [[ "$selected" == "proxy-public (Create new)" ]]; then
+             traefik_network="proxy-public"
+        else
+             traefik_network="$selected"
+        fi
     else
         read -p "Enter the PRODUCTION domain (optional, e.g., bot.example.com): " domain_name
     fi
@@ -368,6 +535,24 @@ setup_bot() {
     
     # Update container name
     sed -i "s/container_name: my-bot-project/container_name: $folder_name/" docker-compose.yml
+    
+    # Update network name in docker-compose files
+    if [ "$traefik_network" != "proxy-public" ]; then
+        sed -i "s/proxy-public/$traefik_network/g" docker-compose.yml
+    fi
+
+    # Ensure proxy-public network exists
+    if [ "$traefik_network" == "proxy-public" ]; then
+        if ! docker network inspect proxy-public >/dev/null 2>&1; then
+            echo -e "${BLUE}>>> Creating external network 'proxy-public'...${NC}"
+            docker network create proxy-public
+        fi
+    else
+        # Check if custom network exists
+        if ! docker network inspect "$traefik_network" >/dev/null 2>&1; then
+             echo -e "${YELLOW}Warning: Network '$traefik_network' does not exist. You may need to create it manually.${NC}"
+        fi
+    fi
     
     # Update CI/CD paths
     echo -e "\n${BLUE}>>> CI/CD Configuration${NC}"
@@ -409,21 +594,14 @@ setup_bot() {
 
 # Main Menu
 while true; do
-    echo -e "\n${BLUE}=============================================${NC}"
-    echo -e "${BLUE}   Main Menu                                 ${NC}"
-    echo -e "${BLUE}=============================================${NC}"
-    echo -e "1) ${GREEN}Global Proxy (Traefik)${NC}"
-    echo -e "2) ${GREEN}Web Project (Next.js)${NC}"
-    echo -e "3) ${GREEN}Telegram Bot${NC}"
-    echo -e "4) ${RED}Quit${NC}"
-    echo -e "---------------------------------------------"
-    read -p "Select option [1-4]: " opt
+    options=("Global Proxy (Traefik)" "Web Project (Next.js)" "Telegram Bot" "Quit")
+    interactive_menu "Main Menu" "${options[@]}"
+    choice=$?
     
-    case $opt in
-        1) setup_traefik; break ;;
-        2) setup_web; break ;;
-        3) setup_bot; break ;;
-        4) echo "Exiting..."; exit 0 ;;
-        *) echo -e "${RED}Invalid option. Please try again.${NC}" ;;
+    case $choice in
+        0) setup_traefik; break ;;
+        1) setup_web; break ;;
+        2) setup_bot; break ;;
+        3) echo "Exiting..."; exit 0 ;;
     esac
 done
