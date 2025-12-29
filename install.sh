@@ -69,7 +69,17 @@ setup_traefik() {
     
     TARGET_DIR="global-proxy"
     if [ -d "$TARGET_DIR" ]; then
-        read -p "Directory '$TARGET_DIR' already exists. Enter new name (or Ctrl+C to cancel): " TARGET_DIR
+        echo -e "${RED}Directory '$TARGET_DIR' already exists.${NC}"
+        read -p "Do you want to overwrite it? (y/n): " overwrite
+        if [[ "$overwrite" =~ ^[Yy]$ ]]; then
+            if [ -f "$TARGET_DIR/docker-compose.yml" ]; then
+                echo -e "${BLUE}Stopping running containers...${NC}"
+                (cd "$TARGET_DIR" && docker compose down 2>/dev/null || true)
+            fi
+            rm -rf "$TARGET_DIR"
+        else
+            read -p "Enter new name (or Ctrl+C to cancel): " TARGET_DIR
+        fi
     fi
 
     cp -r "$TEMPLATES_DIR/traefik" "$TARGET_DIR"
