@@ -87,7 +87,7 @@ setup_traefik() {
     echo -e "Created standalone project in: ${BLUE}$(pwd)${NC}"
     echo -e "To start it:"
     echo -e "  cd $TARGET_DIR"
-    echo -e "  docker-compose up -d"
+    echo -e "  docker compose up -d"
 }
 
 # Function to setup Web
@@ -124,7 +124,7 @@ setup_web() {
     echo -e "  1. cd $folder_name"
     echo -e "  2. git add ."
     echo -e "  3. git commit -m 'Initial commit'"
-    echo -e "  4. docker-compose up -d --build"
+    echo -e "  4. docker compose up -d --build"
 }
 
 # Function to setup Bot
@@ -169,7 +169,7 @@ setup_bot() {
     echo -e "  1. cd $folder_name"
     echo -e "  2. git add ."
     echo -e "  3. git commit -m 'Initial commit'"
-    echo -e "  4. docker-compose up -d --build"
+    echo -e "  4. docker compose up -d --build"
 }
 
 # Main Menu

@@ -12,7 +12,7 @@ This is a standalone Next.js project ready to be deployed behind a Traefik proxy
     ```
 3.  **Run**:
     ```bash
-    docker-compose up -d --build
+    docker compose up -d --build
     ```
 
 

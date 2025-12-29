@@ -12,7 +12,7 @@ This is a standalone Telegram Bot project (Node.js/Telegraf) ready to be deploye
     ```
 3.  **Run**:
     ```bash
-    docker-compose up -d --build
+    docker compose up -d --build
     ```
 
 

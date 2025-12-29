@@ -16,7 +16,7 @@ This repository contains the configuration for the main Traefik proxy server. It
     ```
 4.  **Run**:
     ```bash
-    docker-compose up -d
+    docker compose up -d
     ```
 
 
