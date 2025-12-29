@@ -119,26 +119,24 @@ setup_traefik() {
         # Remove port 8080
         sed -i '/- "8080:8080"/d' docker-compose.yml
         
-        # Add labels using sed to insert before '    networks:'
-        # We use a temporary file to handle newlines and special characters safely
-        cat <<EOF > dashboard_labels.txt
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(\`$dashboard_domain\`)"
-      - "traefik.http.routers.dashboard.service=api@internal"
-      - "traefik.http.routers.dashboard.middlewares=auth"
-      - "traefik.http.middlewares.auth.basicauth.users=$docker_compose_hash"
-      - "traefik.http.routers.dashboard.entrypoints=websecure"
-      - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
-    networks:
-EOF
-        
-        # Insert the content of dashboard_labels.txt replacing the line containing "    networks:"
-        # The file already contains "    networks:" at the end, so we preserve the structure.
-        sed -i '/    networks:/e cat dashboard_labels.txt' docker-compose.yml
-        
-        # Clean up
-        rm dashboard_labels.txt
+        # Add labels using awk to insert before '    networks:'
+        LABELS="    labels:
+      - \"traefik.enable=true\"
+      - \"traefik.http.routers.dashboard.rule=Host(\`$dashboard_domain\`)\"
+      - \"traefik.http.routers.dashboard.service=api@internal\"
+      - \"traefik.http.routers.dashboard.middlewares=auth\"
+      - \"traefik.http.middlewares.auth.basicauth.users=$docker_compose_hash\"
+      - \"traefik.http.routers.dashboard.entrypoints=websecure\"
+      - \"traefik.http.routers.dashboard.tls.certresolver=myresolver\""
+
+        awk -v labels="$LABELS" '{
+            # Match exactly "    networks:" (4 spaces) to avoid matching root "networks:"
+            if ($0 == "    networks:" && !found) {
+                print labels
+                found=1
+            }
+            print $0
+        }' docker-compose.yml > docker-compose.tmp && mv docker-compose.tmp docker-compose.yml
     fi
     
     echo -e "${GREEN}Success!${NC}"
