@@ -10,7 +10,7 @@ providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
     exposedByDefault: false
-    apiVersion: "1.44"
+    # apiVersion: "1.44" # Removed as it causes 'field not found' error in some Traefik versions
   file:
     filename: /etc/traefik/dynamic.yml
     watch: true
