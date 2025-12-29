@@ -5,19 +5,24 @@ This is a CLI tool to generate production-ready Docker projects for your VPS. It
 ## How it works
 
 This repository is NOT your project. It is a **Generator**.
-You clone this repo once, and use it to spawn as many independent projects as you need.
+You use it to spawn as many independent projects as you need, directly on your server.
 
 ## Usage
 
-### Option 1: Remote (Recommended)
-You can run the generator directly without cloning the repo manually:
+Run the generator directly:
 
 ```bash
-# Replace with your actual URL after pushing to GitHub
 bash <(curl -s https://raw.githubusercontent.com/happy-coder-ua/docker-boilerplate/main/install.sh)
 ```
 
-### Option 2: Local (For development)
+Follow the interactive menu to:
+*   **Global Proxy**: Create a `global-proxy` folder (Run this once per server).
+*   **Web Project**: Create a new folder (e.g., `my-shop`) with a Next.js app.
+*   **Telegram Bot**: Create a new folder (e.g., `support-bot`) with a Node.js bot.
+
+### Local Development (Optional)
+
+If you want to contribute or modify the templates:
 
 1.  **Clone this generator**:
     ```bash
@@ -25,15 +30,11 @@ bash <(curl -s https://raw.githubusercontent.com/happy-coder-ua/docker-boilerpla
     cd generator
     ```
 
-2.  **Run the generator**:
+2.  **Run locally**:
     ```bash
     ./install.sh
     ```
 
-3.  **Select what you want to create**:
-    *   **Global Proxy**: Creates a `global-proxy` folder. Run this once per server.
-    *   **Web Project**: Creates a new folder (e.g., `my-shop`) with a Next.js app configured for your domain.
-    *   **Telegram Bot**: Creates a new folder (e.g., `support-bot`) with a Node.js bot.
 
 ## Result
 
