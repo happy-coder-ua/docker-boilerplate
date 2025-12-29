@@ -17,6 +17,11 @@ bash <(curl -s "https://raw.githubusercontent.com/happy-coder-ua/docker-boilerpl
 
 The script will automatically check if Docker is installed and offer to install it if missing.
 
+> **Note:** If you encounter caching issues or the script seems outdated, use this alternative command:
+> ```bash
+> git clone --depth 1 https://github.com/happy-coder-ua/docker-boilerplate.git /tmp/docker-gen && bash /tmp/docker-gen/install.sh && rm -rf /tmp/docker-gen
+> ```
+
 Follow the interactive menu to:
 *   **Global Proxy**: Create a `global-proxy` folder (Run this once per server).
 *   **Web Project**: Create a new folder (e.g., `my-shop`) with a Next.js app.
