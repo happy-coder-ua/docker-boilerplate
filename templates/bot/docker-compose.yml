@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: my-bot-project
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - NODE_ENV=production
+    # Uncomment if you need webhooks via Traefik
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.my-bot.rule=Host(`${DOMAIN_NAME}`)"
+    #   - "traefik.http.routers.my-bot.entrypoints=websecure"
+    #   - "traefik.http.routers.my-bot.tls.certresolver=myresolver"
+
+    #   - "traefik.http.services.my-bot.loadbalancer.server.port=3000"
+    networks:
+      - proxy-public
+
+networks:
+  proxy-public:
+    external: true

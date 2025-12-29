@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.myresolver.acme.storage=acme.json"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+    ports:
+      - "80:80"
+
+      - "443:443"
+      # Dashboard port (insecure mode - for dev only, or protect with middleware)
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./traefik/acme.json:/acme.json
+    networks:
+      - proxy-public
+
+networks:
+  proxy-public:
+    name: proxy-public

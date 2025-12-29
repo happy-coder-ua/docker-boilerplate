@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: my-web-project
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.my-web.rule=Host(`${DOMAIN_NAME}`)"
+      - "traefik.http.routers.my-web.entrypoints=websecure"
+
+      - "traefik.http.routers.my-web.tls.certresolver=myresolver"
+      - "traefik.http.services.my-web.loadbalancer.server.port=3000"
+    networks:
+      - proxy-public
+
+networks:
+  proxy-public:
+    external: true

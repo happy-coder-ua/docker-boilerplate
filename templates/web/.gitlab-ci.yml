@@ -1,0 +1,28 @@
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  image: node:18-alpine
+  script:
+    - npm ci
+    - npm run lint
+    - npm run build
+  only:
+    - main
+
+deploy:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - 'which ssh-agent || ( apk add --update openssh )'
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan $SERVER_HOST >> ~/.ssh/known_hosts
+  script:
+    - ssh $SERVER_USER@$SERVER_HOST "cd /path/to/your/web-project && git pull origin main && docker-compose up -d --build"
+  only:
+    - main

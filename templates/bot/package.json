@@ -1,0 +1,17 @@
+{
+  "name": "bot",
+  "version": "1.0.0",
+  "description": "Telegram Bot Boilerplate",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
