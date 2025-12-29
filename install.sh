@@ -187,6 +187,7 @@ setup_web() {
     cp "$TEMPLATES_DIR/web/Dockerfile" "$folder_name/"
     cp "$TEMPLATES_DIR/web/docker-compose.yml" "$folder_name/"
     cp "$TEMPLATES_DIR/web/.env.example" "$folder_name/"
+    cp "$TEMPLATES_DIR/web/README.md" "$folder_name/README-DOCKER.md"
     cp -r "$TEMPLATES_DIR/web/.github" "$folder_name/" 2>/dev/null || true
     cp "$TEMPLATES_DIR/web/.gitlab-ci.yml" "$folder_name/" 2>/dev/null || true
     
