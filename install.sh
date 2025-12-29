@@ -41,6 +41,9 @@ else
 fi
 
 echo -e "${BLUE}=== Docker Project Generator ===${NC}"
+echo -e "This tool will generate a standalone project in the CURRENT directory."
+echo -e "Current directory: $(pwd)"
+echo ""
 
 # Check Docker
 if ! command -v docker &> /dev/null; then
@@ -50,79 +53,89 @@ fi
 
 # Function to setup Traefik
 setup_traefik() {
-    echo -e "\n${BLUE}>>> Setting up Global Proxy (Traefik)...${NC}"
-    if [ -d "docker-boilerplate-traefik" ]; then
-        cd docker-boilerplate-traefik
-        
-        read -p "Enter email for Let's Encrypt SSL: " email
-        
-        cp .env.example .env
-        sed -i "s/ACME_EMAIL=.*/ACME_EMAIL=$email/" .env
-        
-        chmod 600 traefik/acme.json
-        
-        echo "Starting Traefik..."
-        docker-compose up -d
-        
-        cd ..
-        echo -e "${GREEN}Traefik installed successfully!${NC}"
-    else
-        echo -e "${RED}Error: docker-boilerplate-traefik directory not found.${NC}"
+    echo -e "\n${BLUE}>>> Generating Global Proxy (Traefik)...${NC}"
+    
+    TARGET_DIR="global-proxy"
+    if [ -d "$TARGET_DIR" ]; then
+        read -p "Directory '$TARGET_DIR' already exists. Enter new name (or Ctrl+C to cancel): " TARGET_DIR
     fi
+
+    cp -r "$TEMPLATES_DIR/traefik" "$TARGET_DIR"
+    cd "$TARGET_DIR" || exit
+    
+    read -p "Enter email for Let's Encrypt SSL: " email
+    
+    cp .env.example .env
+    # Use | as delimiter to avoid issues with special chars in email
+    sed -i "s|ACME_EMAIL=.*|ACME_EMAIL=$email|" .env
+    
+    chmod 600 traefik/acme.json
+    
+    echo -e "${GREEN}Success!${NC}"
+    echo -e "Created standalone project in: ${BLUE}$(pwd)${NC}"
+    echo -e "To start it:"
+    echo -e "  cd $TARGET_DIR"
+    echo -e "  docker-compose up -d"
 }
 
 # Function to setup Web
 setup_web() {
-    echo -e "\n${BLUE}>>> Setting up New Web Project...${NC}"
-    read -p "Enter project folder name (e.g., my-website): " folder_name
+    echo -e "\n${BLUE}>>> Generating New Web Project...${NC}"
+    read -p "Enter project name (folder name): " folder_name
     read -p "Enter domain name (e.g., example.com): " domain_name
     
     if [ -d "$folder_name" ]; then
-        echo -e "${RED}Directory $folder_name already exists. Skipping.${NC}"
+        echo -e "${RED}Directory $folder_name already exists. Please choose another name.${NC}"
         return
     fi
     
-    cp -r docker-boilerplate-web "$folder_name"
-    cd "$folder_name"
+    cp -r "$TEMPLATES_DIR/web" "$folder_name"
+    cd "$folder_name" || exit
     
     cp .env.example .env
-    sed -i "s/DOMAIN_NAME=.*/DOMAIN_NAME=$domain_name/" .env
+    sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=$domain_name|" .env
     
     # Update container name to be unique
     sed -i "s/container_name: my-web-project/container_name: $folder_name/" docker-compose.yml
-    # Update router names to be unique (remove special chars for router name)
+    
+    # Update router names to be unique (sanitize name)
     router_name=$(echo "$folder_name" | tr -cd '[:alnum:]-')
     sed -i "s/traefik.http.routers.my-web/traefik.http.routers.$router_name/g" docker-compose.yml
     sed -i "s/traefik.http.services.my-web/traefik.http.services.$router_name/g" docker-compose.yml
     
-    echo "Starting Web Project..."
-    docker-compose up -d --build
+    # Initialize new git repo
+    git init -q
     
-    cd ..
-    echo -e "${GREEN}Web project '$folder_name' deployed at https://$domain_name${NC}"
+    echo -e "${GREEN}Success!${NC}"
+    echo -e "Created standalone project in: ${BLUE}$(pwd)${NC}"
+    echo -e "Next steps:"
+    echo -e "  1. cd $folder_name"
+    echo -e "  2. git add ."
+    echo -e "  3. git commit -m 'Initial commit'"
+    echo -e "  4. docker-compose up -d --build"
 }
 
 # Function to setup Bot
 setup_bot() {
-    echo -e "\n${BLUE}>>> Setting up New Bot Project...${NC}"
-    read -p "Enter project folder name (e.g., my-bot): " folder_name
+    echo -e "\n${BLUE}>>> Generating New Bot Project...${NC}"
+    read -p "Enter project name (folder name): " folder_name
     read -p "Enter Bot Token: " bot_token
     read -p "Enter Domain (optional, press enter to skip): " domain_name
     
     if [ -d "$folder_name" ]; then
-        echo -e "${RED}Directory $folder_name already exists. Skipping.${NC}"
+        echo -e "${RED}Directory $folder_name already exists. Please choose another name.${NC}"
         return
     fi
     
-    cp -r docker-boilerplate-bot "$folder_name"
-    cd "$folder_name"
+    cp -r "$TEMPLATES_DIR/bot" "$folder_name"
+    cd "$folder_name" || exit
     
     cp .env.example .env
-    sed -i "s/BOT_TOKEN=.*/BOT_TOKEN=$bot_token/" .env
+    sed -i "s|BOT_TOKEN=.*|BOT_TOKEN=$bot_token|" .env
     
     if [ ! -z "$domain_name" ]; then
-        sed -i "s/DOMAIN_NAME=.*/DOMAIN_NAME=$domain_name/" .env
-        # Uncomment Traefik labels if domain is provided
+        sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=$domain_name|" .env
+        # Uncomment Traefik labels
         sed -i 's/# labels:/labels:/' docker-compose.yml
         sed -i 's/#   - "traefik/  - "traefik/g' docker-compose.yml
         
@@ -135,27 +148,35 @@ setup_bot() {
     # Update container name
     sed -i "s/container_name: my-bot-project/container_name: $folder_name/" docker-compose.yml
     
-    echo "Starting Bot Project..."
-    docker-compose up -d --build
+    # Initialize new git repo
+    git init -q
     
-    cd ..
-    echo -e "${GREEN}Bot project '$folder_name' deployed!${NC}"
+    echo -e "${GREEN}Success!${NC}"
+    echo -e "Created standalone project in: ${BLUE}$(pwd)${NC}"
+    echo -e "Next steps:"
+    echo -e "  1. cd $folder_name"
+    echo -e "  2. git add ."
+    echo -e "  3. git commit -m 'Initial commit'"
+    echo -e "  4. docker-compose up -d --build"
 }
 
 # Main Menu
-PS3='Please enter your choice: '
-options=("Install Global Proxy (Traefik)" "Create New Web Project" "Create New Bot Project" "Quit")
+PS3='Select project type to generate: '
+options=("Global Proxy (Traefik)" "Web Project (Next.js)" "Telegram Bot" "Quit")
 select opt in "${options[@]}"
 do
     case $opt in
-        "Install Global Proxy (Traefik)")
+        "Global Proxy (Traefik)")
             setup_traefik
+            break
             ;;
-        "Create New Web Project")
+        "Web Project (Next.js)")
             setup_web
+            break
             ;;
-        "Create New Bot Project")
+        "Telegram Bot")
             setup_bot
+            break
             ;;
         "Quit")
             break
