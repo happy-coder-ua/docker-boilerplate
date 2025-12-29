@@ -1,14 +1,14 @@
 services:
   traefik:
-    image: traefik:v3.6
+    image: traefik:v3.2
     container_name: traefik
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     environment:
       - DOCKER_API_VERSION=1.44
-    command:
-      - "--configFile=/etc/traefik/traefik.yml"
+    # command: # Config file is loaded automatically from /etc/traefik/traefik.yml
+    #   - "--configFile=/etc/traefik/traefik.yml"
     ports:
       - "80:80"
 
