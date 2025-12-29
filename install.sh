@@ -160,7 +160,9 @@ setup_web() {
     echo -e "\n${BLUE}>>> Generating New Web Project...${NC}"
     
     read -p "Enter project name (folder name): " folder_name
-    read -p "Enter domain name (e.g., example.com): " domain_name
+    echo -e "Enter the domain for your LOCAL environment (e.g., project.docker.localhost)."
+    echo -e "For production (VPS), you will configure the domain in GitHub Secrets/GitLab Variables."
+    read -p "Local Domain: " domain_name
     
     if [ -d "$folder_name" ]; then
         read -p "Directory $folder_name already exists. Do you want to remove it and continue? (y/N): " confirm
@@ -240,9 +242,15 @@ setup_web() {
     sed -i "s/traefik.http.services.my-web/traefik.http.services.$router_name/g" docker-compose.yml
     
     # Update CI/CD paths
-    # We assume the user is running this script on the server where the project will live.
-    # So $(pwd) is the absolute path to the project on the VPS.
-    PROJECT_PATH=$(pwd)
+    echo -e "\n${BLUE}>>> CI/CD Configuration${NC}"
+    echo "Since you are likely running this locally, we need to know where the project will be on your VPS."
+    read -p "Enter the absolute path on VPS (e.g., /root/projects/$folder_name): " remote_path
+    
+    if [ -z "$remote_path" ]; then
+        remote_path="/root/projects/$folder_name"
+        echo -e "Using default: $remote_path"
+    fi
+    PROJECT_PATH="$remote_path"
     
     # Update GitHub Actions
     if [ -f ".github/workflows/main.yml" ]; then
