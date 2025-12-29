@@ -225,7 +225,7 @@ setup_traefik() {
       - \"traefik.http.middlewares.dashboard-redirect.redirectregex.regex=^https?://[^/]+/\$\$\"
       - \"traefik.http.middlewares.dashboard-redirect.redirectregex.replacement=https://$dashboard_domain/dashboard/\"
       - \"traefik.http.middlewares.dashboard-redirect.redirectregex.permanent=true\"
-      - \"traefik.http.routers.dashboard.entrypoints=websecure\"
+      - \"traefik.http.routers.dashboard.entrypoints=https\"
       - \"traefik.http.routers.dashboard.tls.certresolver=myresolver\""
 
         awk -v labels="$LABELS" '{

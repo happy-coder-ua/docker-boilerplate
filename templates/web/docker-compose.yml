@@ -6,8 +6,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.my-web.rule=Host(`${DOMAIN_NAME}`)"
-      - "traefik.http.routers.my-web.entrypoints=websecure"
-
+      - "traefik.http.routers.my-web.entrypoints=https"
       - "traefik.http.routers.my-web.tls.certresolver=myresolver"
       - "traefik.http.services.my-web.loadbalancer.server.port=3000"
     networks:
