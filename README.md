@@ -12,8 +12,10 @@ You use it to spawn as many independent projects as you need, directly on your s
 Run the generator directly:
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/happy-coder-ua/docker-boilerplate/main/install.sh)
+bash <(curl -s "https://raw.githubusercontent.com/happy-coder-ua/docker-boilerplate/main/install.sh?v=$(date +%s)")
 ```
+
+The script will automatically check if Docker is installed and offer to install it if missing.
 
 Follow the interactive menu to:
 *   **Global Proxy**: Create a `global-proxy` folder (Run this once per server).
