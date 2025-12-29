@@ -12,6 +12,6 @@ deploy:
     - chmod 700 ~/.ssh
     - ssh-keyscan $SERVER_HOST >> ~/.ssh/known_hosts
   script:
-    - ssh $SERVER_USER@$SERVER_HOST "cd /path/to/your/bot-project && git pull origin main && docker compose up -d --build"
+    - ssh $SERVER_USER@$SERVER_HOST "cd /path/to/your/bot-project && git pull origin main && echo \"PROJECT_NAME=PROJECT_NAME_PLACEHOLDER\" > .env && echo \"BOT_TOKEN=\$BOT_TOKEN\" >> .env && echo \"DOMAIN_NAME=\$DOMAIN_NAME\" >> .env && docker compose up -d --build"
   only:
     - main

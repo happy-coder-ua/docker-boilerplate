@@ -441,12 +441,13 @@ setup_web() {
     # Update GitHub Actions
     if [ -f ".github/workflows/main.yml" ]; then
         sed -i "s|cd /path/to/your/web-project|cd $PROJECT_PATH|" .github/workflows/main.yml
-        sed -i "s|PROJECT_NAME=my-web-project|PROJECT_NAME=$project_name_sanitized|" .github/workflows/main.yml
+        sed -i "s|PROJECT_NAME=PROJECT_NAME_PLACEHOLDER|PROJECT_NAME=$project_name_sanitized|" .github/workflows/main.yml
     fi
     
     # Update GitLab CI
     if [ -f ".gitlab-ci.yml" ]; then
         sed -i "s|cd /path/to/your/web-project|cd $PROJECT_PATH|" .gitlab-ci.yml
+        sed -i "s|PROJECT_NAME=PROJECT_NAME_PLACEHOLDER|PROJECT_NAME=$project_name_sanitized|" .gitlab-ci.yml
     fi
     
     # Initialize new git repo
@@ -568,12 +569,13 @@ setup_bot() {
     # Update GitHub Actions
     if [ -f ".github/workflows/main.yml" ]; then
         sed -i "s|cd /path/to/your/bot-project|cd $PROJECT_PATH|" .github/workflows/main.yml
-        sed -i "s|PROJECT_NAME=my-bot-project|PROJECT_NAME=$project_name_sanitized|" .github/workflows/main.yml
+        sed -i "s|PROJECT_NAME=PROJECT_NAME_PLACEHOLDER|PROJECT_NAME=$project_name_sanitized|" .github/workflows/main.yml
     fi
     
     # Update GitLab CI
     if [ -f ".gitlab-ci.yml" ]; then
         sed -i "s|cd /path/to/your/bot-project|cd $PROJECT_PATH|" .gitlab-ci.yml
+        sed -i "s|PROJECT_NAME=PROJECT_NAME_PLACEHOLDER|PROJECT_NAME=$project_name_sanitized|" .gitlab-ci.yml
     fi
     
     # Initialize new git repo
