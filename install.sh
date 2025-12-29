@@ -82,6 +82,51 @@ setup_traefik() {
     sed -i "s|ACME_EMAIL=.*|ACME_EMAIL=$email|" .env
     
     chmod 600 traefik/acme.json
+
+    # Dashboard Setup
+    read -p "Do you want to enable the Traefik Dashboard with Basic Auth? (y/n): " enable_dashboard
+    if [[ "$enable_dashboard" =~ ^[Yy]$ ]]; then
+        read -p "Enter Dashboard Domain (e.g. traefik.yourdomain.com): " dashboard_domain
+        read -p "Enter Dashboard Username: " dashboard_user
+        read -s -p "Enter Dashboard Password: " dashboard_pass
+        echo ""
+        
+        echo -e "${BLUE}>>> Generating password hash...${NC}"
+        if ! docker image inspect httpd:alpine &> /dev/null; then
+             echo "Pulling helper image..."
+             docker pull -q httpd:alpine
+        fi
+        
+        # Generate hash: user:$apr1$xyz...
+        hash=$(docker run --rm httpd:alpine htpasswd -Bbn "$dashboard_user" "$dashboard_pass")
+        
+        # Escape $ to $$ for docker-compose
+        docker_compose_hash=$(echo "$hash" | sed 's/\$/\$\$/g')
+        
+        # Disable insecure mode
+        sed -i 's/insecure: true/insecure: false/' traefik/traefik.yml
+        
+        # Remove port 8080
+        sed -i '/- "8080:8080"/d' docker-compose.yml
+        
+        # Add labels using awk to insert before '    networks:'
+        LABELS="    labels:
+      - \"traefik.enable=true\"
+      - \"traefik.http.routers.dashboard.rule=Host(\`$dashboard_domain\`)\"
+      - \"traefik.http.routers.dashboard.service=api@internal\"
+      - \"traefik.http.routers.dashboard.middlewares=auth\"
+      - \"traefik.http.middlewares.auth.basicauth.users=$docker_compose_hash\"
+      - \"traefik.http.routers.dashboard.entrypoints=websecure\"
+      - \"traefik.http.routers.dashboard.tls.certresolver=myresolver\""
+
+        awk -v labels="$LABELS" '{
+            if ($0 == "    networks:" && !found) {
+                print labels
+                found=1
+            }
+            print $0
+        }' docker-compose.yml > docker-compose.tmp && mv docker-compose.tmp docker-compose.yml
+    fi
     
     echo -e "${GREEN}Success!${NC}"
     echo -e "Created standalone project in: ${BLUE}$(pwd)${NC}"
