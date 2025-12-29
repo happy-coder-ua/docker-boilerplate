@@ -163,8 +163,15 @@ setup_web() {
     read -p "Enter domain name (e.g., example.com): " domain_name
     
     if [ -d "$folder_name" ]; then
-        echo -e "${RED}Directory $folder_name already exists. Please choose another name.${NC}"
-        return
+        read -p "Directory $folder_name already exists. Do you want to remove it and continue? (y/N): " confirm
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            echo -e "${YELLOW}Removing existing directory...${NC}"
+            # Use Docker to remove it in case it's owned by root from a previous failed run
+            docker run --rm -v "$(pwd):/work" -w /work node:lts-alpine rm -rf "$folder_name"
+        else
+            echo -e "${RED}Aborted.${NC}"
+            return
+        fi
     fi
 
     echo -e "${BLUE}>>> Running create-next-app@latest via Docker...${NC}"
@@ -173,12 +180,25 @@ setup_web() {
     # Run create-next-app in a container
     # We map the current directory to /work and run the command
     # We use -it to allow interactive prompts
-    docker run --rm -it -v "$(pwd):/work" -w /work node:lts-alpine \
+    # We use --user to ensure files are created with the current user's permissions
+    # We set HOME=/tmp to avoid permission issues with npm cache in /root
+    docker run --rm -it -v "$(pwd):/work" -w /work -e HOME=/tmp --user "$(id -u):$(id -g)" node:lts-alpine \
         npx create-next-app@latest "$folder_name"
         
     if [ ! -d "$folder_name" ]; then
             echo -e "${RED}Project generation failed or was cancelled.${NC}"
             return
+    fi
+
+    echo -e "${BLUE}>>> Ensuring correct permissions...${NC}"
+    # Check if we own the directory and it is writable
+    if [ ! -w "$folder_name" ]; then
+        echo -e "${YELLOW}Directory is not writable (likely owned by root). Requesting sudo to fix ownership...${NC}"
+        # We use sudo to fix the ownership of the folder created by Docker
+        sudo chown -R "$(id -u):$(id -g)" "$folder_name"
+        sudo chmod -R u+rwX,go+rX "$folder_name"
+    else
+        echo -e "${GREEN}Permissions look correct.${NC}"
     fi
     
     echo -e "${BLUE}>>> Applying Docker boilerplate configuration...${NC}"
