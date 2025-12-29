@@ -14,14 +14,14 @@ You can run the generator directly without cloning the repo manually:
 
 ```bash
 # Replace with your actual URL after pushing to GitHub
-bash <(curl -s https://raw.githubusercontent.com/your-username/docker-boilerplate/main/install.sh)
+bash <(curl -s https://raw.githubusercontent.com/happy-coder-ua/docker-boilerplate/main/install.sh)
 ```
 
 ### Option 2: Local (For development)
 
 1.  **Clone this generator**:
     ```bash
-    git clone https://github.com/your-username/docker-boilerplate.git generator
+    git clone https://github.com/happy-coder-ua/docker-boilerplate.git generator
     cd generator
     ```
 
@@ -50,3 +50,7 @@ All generated projects are pre-configured to work with the **Global Proxy**.
 *   **Traefik** listens on ports 80/443.
 *   **Projects** connect to the `proxy-public` Docker network.
 *   Traefik automatically routes traffic to the correct container based on the domain name in `.env`.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

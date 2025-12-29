@@ -2,7 +2,7 @@
 
 # Configuration
 # !!! IMPORTANT: REPLACE THIS WITH YOUR ACTUAL GITHUB REPO URL !!!
-REPO_URL="https://github.com/your-username/docker-boilerplate.git"
+REPO_URL="https://github.com/happy-coder-ua/docker-boilerplate.git"
 
 # Colors
 GREEN='\033[0;32m'
