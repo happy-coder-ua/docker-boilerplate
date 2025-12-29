@@ -2,39 +2,48 @@ name: Deploy (reusable)
 
 on:
   workflow_call:
-    secrets:
+    inputs:
       SERVER_HOST:
         required: true
+        type: string
       SERVER_USER:
         required: true
-      SSH_PRIVATE_KEY:
-        required: true
+        type: string
       PROJECT_PATH:
         required: true
+        type: string
       PROJECT_NAME:
+        required: true
+        type: string
+      DOMAIN_NAME:
+        required: false
+        type: string
+      TRAEFIK_NETWORK:
+        required: true
+        type: string
+      TRAEFIK_ENABLE:
+        required: false
+        type: string
+        default: "false"
+    secrets:
+      SSH_PRIVATE_KEY:
         required: true
       BOT_TOKEN:
         required: true
-      TRAEFIK_NETWORK:
-        required: true
-      DOMAIN_NAME:
-        required: false
-      TRAEFIK_ENABLE:
-        required: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      SERVER_HOST: ${{ secrets.SERVER_HOST }}
-      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_HOST: ${{ inputs.SERVER_HOST }}
+      SERVER_USER: ${{ inputs.SERVER_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
-      PROJECT_NAME: ${{ secrets.PROJECT_NAME }}
+      PROJECT_PATH: ${{ inputs.PROJECT_PATH }}
+      PROJECT_NAME: ${{ inputs.PROJECT_NAME }}
       BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-      DOMAIN_NAME: ${{ secrets.DOMAIN_NAME }}
-      TRAEFIK_NETWORK: ${{ secrets.TRAEFIK_NETWORK }}
-      TRAEFIK_ENABLE: ${{ secrets.TRAEFIK_ENABLE }}
+      DOMAIN_NAME: ${{ inputs.DOMAIN_NAME }}
+      TRAEFIK_NETWORK: ${{ inputs.TRAEFIK_NETWORK }}
+      TRAEFIK_ENABLE: ${{ inputs.TRAEFIK_ENABLE }}
     steps:
       - name: Validate required secrets
         run: |

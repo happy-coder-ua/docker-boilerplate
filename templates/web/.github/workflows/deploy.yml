@@ -2,33 +2,40 @@ name: Deploy (reusable)
 
 on:
   workflow_call:
-    secrets:
+    inputs:
       SERVER_HOST:
         required: true
+        type: string
       SERVER_USER:
         required: true
-      SSH_PRIVATE_KEY:
-        required: true
+        type: string
       PROJECT_PATH:
         required: true
+        type: string
       PROJECT_NAME:
         required: true
+        type: string
       DOMAIN_NAME:
         required: true
+        type: string
       TRAEFIK_NETWORK:
+        required: true
+        type: string
+    secrets:
+      SSH_PRIVATE_KEY:
         required: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      SERVER_HOST: ${{ secrets.SERVER_HOST }}
-      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_HOST: ${{ inputs.SERVER_HOST }}
+      SERVER_USER: ${{ inputs.SERVER_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
-      PROJECT_NAME: ${{ secrets.PROJECT_NAME }}
-      DOMAIN_NAME: ${{ secrets.DOMAIN_NAME }}
-      TRAEFIK_NETWORK: ${{ secrets.TRAEFIK_NETWORK }}
+      PROJECT_PATH: ${{ inputs.PROJECT_PATH }}
+      PROJECT_NAME: ${{ inputs.PROJECT_NAME }}
+      DOMAIN_NAME: ${{ inputs.DOMAIN_NAME }}
+      TRAEFIK_NETWORK: ${{ inputs.TRAEFIK_NETWORK }}
     steps:
       - name: Validate required secrets
         run: |
