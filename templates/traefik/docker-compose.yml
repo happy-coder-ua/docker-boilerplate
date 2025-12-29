@@ -7,6 +7,8 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    environment:
+      - DOCKER_API_VERSION=1.44
     command:
       - "--configFile=/etc/traefik/traefik.yml"
       - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
