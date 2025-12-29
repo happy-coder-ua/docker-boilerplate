@@ -20,7 +20,39 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    if: >-
+      ${{
+        secrets.SERVER_HOST != '' &&
+        secrets.SERVER_USER != '' &&
+        secrets.SSH_PRIVATE_KEY != '' &&
+        secrets.PROJECT_PATH != '' &&
+        secrets.PROJECT_NAME != '' &&
+        secrets.DOMAIN_NAME != '' &&
+        secrets.TRAEFIK_NETWORK != ''
+      }}
     steps:
+      - name: Validate required secrets
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          PROJECT_PATH: ${{ secrets.PROJECT_PATH }}
+          PROJECT_NAME: ${{ secrets.PROJECT_NAME }}
+          DOMAIN_NAME: ${{ secrets.DOMAIN_NAME }}
+          TRAEFIK_NETWORK: ${{ secrets.TRAEFIK_NETWORK }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for key in SERVER_HOST SERVER_USER SSH_PRIVATE_KEY PROJECT_PATH PROJECT_NAME DOMAIN_NAME TRAEFIK_NETWORK; do
+            if [ -z "${!key}" ]; then
+              echo "Missing required secret: $key" >&2
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:

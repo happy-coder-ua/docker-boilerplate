@@ -15,6 +15,10 @@ build:
 deploy:
   stage: deploy
   image: alpine:latest
+  rules:
+    - if: '$SERVER_HOST && $SERVER_USER && $SSH_PRIVATE_KEY && $PROJECT_PATH && $PROJECT_NAME && $DOMAIN_NAME && $TRAEFIK_NETWORK'
+      when: on_success
+    - when: never
   before_script:
     - 'which ssh-agent || ( apk add --update openssh )'
     - eval $(ssh-agent -s)
@@ -23,6 +27,5 @@ deploy:
     - chmod 700 ~/.ssh
     - ssh-keyscan $SERVER_HOST >> ~/.ssh/known_hosts
   script:
+    - '[ -n "$SERVER_HOST" ] && [ -n "$SERVER_USER" ] && [ -n "$SSH_PRIVATE_KEY" ] && [ -n "$PROJECT_PATH" ] && [ -n "$PROJECT_NAME" ] && [ -n "$DOMAIN_NAME" ] && [ -n "$TRAEFIK_NETWORK" ]'
     - ssh $SERVER_USER@$SERVER_HOST "cd $PROJECT_PATH && git pull origin main && echo \"PROJECT_NAME=$PROJECT_NAME\" > .env && echo \"DOMAIN_NAME=$DOMAIN_NAME\" >> .env && echo \"TRAEFIK_NETWORK=$TRAEFIK_NETWORK\" >> .env && docker compose up -d --build"
-  only:
-    - main
