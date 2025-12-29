@@ -119,26 +119,26 @@ setup_traefik() {
         # Remove port 8080
         sed -i '/- "8080:8080"/d' docker-compose.yml
         
-        # Add labels using awk to insert before '    networks:'
-        LABELS="    labels:
-      - \"traefik.enable=true\"
-      - \"traefik.http.routers.dashboard.rule=Host(\`$dashboard_domain\`)\"
-      - \"traefik.http.routers.dashboard.service=api@internal\"
-      - \"traefik.http.routers.dashboard.middlewares=auth,dashboard-redirect\"
-      - \"traefik.http.middlewares.auth.basicauth.users=$docker_compose_hash\"
-      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.regex=^https?://[^/]+/?\$\$\"
-      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.replacement=https://$dashboard_domain/dashboard/\"
-      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.permanent=true\"
-      - \"traefik.http.routers.dashboard.entrypoints=websecure\"
-      - \"traefik.http.routers.dashboard.tls.certresolver=myresolver\""
-
-        awk -v labels="$LABELS" '{
-            if ($0 == "    networks:" && !found) {
-                print labels
-                found=1
-            }
-            print $0
-        }' docker-compose.yml > docker-compose.tmp && mv docker-compose.tmp docker-compose.yml
+        # Add labels using sed to insert before '    networks:'
+        # We use a temporary file to handle newlines and special characters safely
+        cat <<EOF > dashboard_labels.txt
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(\`$dashboard_domain\`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=$docker_compose_hash"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
+    networks:
+EOF
+        
+        # Insert the content of dashboard_labels.txt replacing the line containing "    networks:"
+        # The file already contains "    networks:" at the end, so we preserve the structure.
+        sed -i '/    networks:/e cat dashboard_labels.txt' docker-compose.yml
+        
+        # Clean up
+        rm dashboard_labels.txt
     fi
     
     echo -e "${GREEN}Success!${NC}"
@@ -147,7 +147,7 @@ setup_traefik() {
     echo -e "  cd $TARGET_DIR"
     echo -e "  docker compose up -d"
     if [[ "$enable_dashboard" =~ ^[Yy]$ ]]; then
-        echo -e "  Dashboard: https://$dashboard_domain/dashboard/"
+        echo -e "  Dashboard: https://$dashboard_domain/dashboard/ (Don't forget the trailing slash!)"
     fi
 }
 
