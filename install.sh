@@ -91,6 +91,9 @@ setup_traefik() {
     # Use | as delimiter to avoid issues with special chars in email
     sed -i "s|ACME_EMAIL=.*|ACME_EMAIL=$email|" .env
     
+    # Also update email in traefik.yml
+    sed -i "s|EMAIL_PLACEHOLDER|$email|" traefik/traefik.yml
+    
     chmod 600 traefik/acme.json
 
     # Dashboard Setup

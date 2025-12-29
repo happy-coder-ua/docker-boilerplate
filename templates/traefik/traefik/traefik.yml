@@ -27,3 +27,11 @@ entryPoints:
   websecure:
     address: ":443"
 
+certificatesResolvers:
+  myresolver:
+    acme:
+      email: "EMAIL_PLACEHOLDER"
+      storage: "/acme.json"
+      httpChallenge:
+        entryPoint: web
+

@@ -9,9 +9,6 @@ services:
       - DOCKER_API_VERSION=1.44
     command:
       - "--configFile=/etc/traefik/traefik.yml"
-      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
-      - "--certificatesresolvers.myresolver.acme.storage=acme.json"
-      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
     ports:
       - "80:80"
 
