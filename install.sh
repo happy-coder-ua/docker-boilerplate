@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# Version: 1.1.0
+
 # Configuration
 # !!! IMPORTANT: REPLACE THIS WITH YOUR ACTUAL GITHUB REPO URL !!!
 REPO_URL="https://github.com/happy-coder-ua/docker-boilerplate.git"
@@ -40,7 +42,7 @@ else
     trap "rm -rf $TEMP_DIR" EXIT
 fi
 
-echo -e "${BLUE}=== Docker Project Generator ===${NC}"
+echo -e "${BLUE}=== Docker Project Generator v1.1.0 ===${NC}"
 echo -e "This tool will generate a standalone project in the CURRENT directory."
 echo -e "Current directory: $(pwd)"
 echo ""
