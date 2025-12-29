@@ -441,6 +441,7 @@ setup_web() {
     # Update GitHub Actions
     if [ -f ".github/workflows/main.yml" ]; then
         sed -i "s|cd /path/to/your/web-project|cd $PROJECT_PATH|" .github/workflows/main.yml
+        sed -i "s|PROJECT_NAME=my-web-project|PROJECT_NAME=$project_name_sanitized|" .github/workflows/main.yml
     fi
     
     # Update GitLab CI
@@ -567,6 +568,7 @@ setup_bot() {
     # Update GitHub Actions
     if [ -f ".github/workflows/main.yml" ]; then
         sed -i "s|cd /path/to/your/bot-project|cd $PROJECT_PATH|" .github/workflows/main.yml
+        sed -i "s|PROJECT_NAME=my-bot-project|PROJECT_NAME=$project_name_sanitized|" .github/workflows/main.yml
     fi
     
     # Update GitLab CI

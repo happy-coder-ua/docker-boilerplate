@@ -31,7 +31,8 @@ jobs:
             cd /path/to/your/web-project
             git pull origin main
             # Create/Update .env from secrets
-            echo "DOMAIN_NAME=${{ secrets.DOMAIN_NAME }}" > .env
+            echo "PROJECT_NAME=my-web-project" > .env
+            echo "DOMAIN_NAME=${{ secrets.DOMAIN_NAME }}" >> .env
             # You can add more variables here:
             # echo "ANOTHER_VAR=${{ secrets.ANOTHER_VAR }}" >> .env
             
