@@ -124,8 +124,11 @@ setup_traefik() {
       - \"traefik.enable=true\"
       - \"traefik.http.routers.dashboard.rule=Host(\`$dashboard_domain\`)\"
       - \"traefik.http.routers.dashboard.service=api@internal\"
-      - \"traefik.http.routers.dashboard.middlewares=auth\"
+      - \"traefik.http.routers.dashboard.middlewares=auth,dashboard-redirect\"
       - \"traefik.http.middlewares.auth.basicauth.users=$docker_compose_hash\"
+      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.regex=^https?://[^/]+/\$\$\"
+      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.replacement=https://$dashboard_domain/dashboard/\"
+      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.permanent=true\"
       - \"traefik.http.routers.dashboard.entrypoints=websecure\"
       - \"traefik.http.routers.dashboard.tls.certresolver=myresolver\""
 
