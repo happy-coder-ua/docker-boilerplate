@@ -219,6 +219,21 @@ setup_web() {
     sed -i "s/traefik.http.routers.my-web/traefik.http.routers.$router_name/g" docker-compose.yml
     sed -i "s/traefik.http.services.my-web/traefik.http.services.$router_name/g" docker-compose.yml
     
+    # Update CI/CD paths
+    # We assume the user is running this script on the server where the project will live.
+    # So $(pwd) is the absolute path to the project on the VPS.
+    PROJECT_PATH=$(pwd)
+    
+    # Update GitHub Actions
+    if [ -f ".github/workflows/main.yml" ]; then
+        sed -i "s|cd /path/to/your/web-project|cd $PROJECT_PATH|" .github/workflows/main.yml
+    fi
+    
+    # Update GitLab CI
+    if [ -f ".gitlab-ci.yml" ]; then
+        sed -i "s|cd /path/to/your/web-project|cd $PROJECT_PATH|" .gitlab-ci.yml
+    fi
+    
     # Initialize new git repo
     git init -q
     
@@ -263,6 +278,19 @@ setup_bot() {
     
     # Update container name
     sed -i "s/container_name: my-bot-project/container_name: $folder_name/" docker-compose.yml
+    
+    # Update CI/CD paths
+    PROJECT_PATH=$(pwd)
+    
+    # Update GitHub Actions
+    if [ -f ".github/workflows/main.yml" ]; then
+        sed -i "s|cd /path/to/your/bot-project|cd $PROJECT_PATH|" .github/workflows/main.yml
+    fi
+    
+    # Update GitLab CI
+    if [ -f ".gitlab-ci.yml" ]; then
+        sed -i "s|cd /path/to/your/bot-project|cd $PROJECT_PATH|" .gitlab-ci.yml
+    fi
     
     # Initialize new git repo
     git init -q
