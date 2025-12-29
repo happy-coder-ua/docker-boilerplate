@@ -47,8 +47,18 @@ echo ""
 
 # Check Docker
 if ! command -v docker &> /dev/null; then
-    echo -e "${RED}Docker is not installed. Please install Docker first.${NC}"
-    exit 1
+    echo -e "${RED}Docker is not installed.${NC}"
+    read -p "Do you want to install Docker automatically? (y/n): " install_choice
+    if [[ "$install_choice" =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}>>> Installing Docker...${NC}"
+        curl -fsSL https://get.docker.com -o get-docker.sh
+        sh get-docker.sh
+        rm get-docker.sh
+        echo -e "${GREEN}Docker installed successfully.${NC}"
+    else
+        echo -e "${RED}Please install Docker manually and run this script again.${NC}"
+        exit 1
+    fi
 fi
 
 # Function to setup Traefik
