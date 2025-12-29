@@ -3,7 +3,7 @@ services:
     build:
       context: .
       target: deps
-    container_name: my-web-project-dev
+    container_name: ${PROJECT_NAME?PROJECT_NAME must be set}-dev
     command: npm run dev
     volumes:
       - .:/app

@@ -1,14 +1,14 @@
 services:
   web:
     build: .
-    container_name: my-web-project
+    container_name: ${PROJECT_NAME?PROJECT_NAME must be set}
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.my-web.rule=Host(`${DOMAIN_NAME}`)"
-      - "traefik.http.routers.my-web.entrypoints=https"
-      - "traefik.http.routers.my-web.tls.certresolver=myresolver"
-      - "traefik.http.services.my-web.loadbalancer.server.port=3000"
+      - "traefik.http.routers.${PROJECT_NAME}.rule=Host(`${DOMAIN_NAME}`)"
+      - "traefik.http.routers.${PROJECT_NAME}.entrypoints=https"
+      - "traefik.http.routers.${PROJECT_NAME}.tls.certresolver=myresolver"
+      - "traefik.http.services.${PROJECT_NAME}.loadbalancer.server.port=3000"
     networks:
       - proxy-public
 

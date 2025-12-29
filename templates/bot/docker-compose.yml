@@ -1,7 +1,7 @@
 services:
   bot:
     build: .
-    container_name: my-bot-project
+    container_name: ${PROJECT_NAME?PROJECT_NAME must be set}
     restart: unless-stopped
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
@@ -9,11 +9,11 @@ services:
     # Uncomment if you need webhooks via Traefik
     # labels:
     #   - "traefik.enable=true"
-    #   - "traefik.http.routers.my-bot.rule=Host(`${DOMAIN_NAME}`)"
-    #   - "traefik.http.routers.my-bot.entrypoints=https"
-    #   - "traefik.http.routers.my-bot.tls.certresolver=myresolver"
+    #   - "traefik.http.routers.${PROJECT_NAME}.rule=Host(`${DOMAIN_NAME}`)"
+    #   - "traefik.http.routers.${PROJECT_NAME}.entrypoints=https"
+    #   - "traefik.http.routers.${PROJECT_NAME}.tls.certresolver=myresolver"
 
-    #   - "traefik.http.services.my-bot.loadbalancer.server.port=3000"
+    #   - "traefik.http.services.${PROJECT_NAME}.loadbalancer.server.port=3000"
     networks:
       - proxy-public
 

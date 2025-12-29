@@ -405,6 +405,13 @@ setup_web() {
     cp .env.example .env
     sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=$domain_name|" .env
     
+    # Add PROJECT_NAME to .env
+    # We sanitize the folder name to ensure it's a valid Traefik router name
+    project_name_sanitized=$(echo "$folder_name" | tr -cd '[:alnum:]-')
+    echo "" >> .env
+    echo "# Project Name (used for container names and Traefik routers)" >> .env
+    echo "PROJECT_NAME=$project_name_sanitized" >> .env
+    
     # Update network name in docker-compose files
     if [ "$traefik_network" != "proxy-public" ]; then
         sed -i "s/proxy-public/$traefik_network/g" docker-compose.yml
@@ -412,17 +419,6 @@ setup_web() {
             sed -i "s/proxy-public/$traefik_network/g" docker-compose.dev.yml
         fi
     fi
-    
-    # Update container name to be unique
-    sed -i "s/container_name: my-web-project/container_name: $folder_name/" docker-compose.yml
-    if [ -f "docker-compose.dev.yml" ]; then
-        sed -i "s/container_name: my-web-project-dev/container_name: ${folder_name}-dev/" docker-compose.dev.yml
-    fi
-    
-    # Update router names to be unique (sanitize name)
-    router_name=$(echo "$folder_name" | tr -cd '[:alnum:]-')
-    sed -i "s/traefik.http.routers.my-web/traefik.http.routers.$router_name/g" docker-compose.yml
-    sed -i "s/traefik.http.services.my-web/traefik.http.services.$router_name/g" docker-compose.yml
     
     # Update CI/CD paths
     echo -e "\n${BLUE}>>> CI/CD Configuration${NC}"
@@ -521,20 +517,18 @@ setup_bot() {
     cp .env.example .env
     sed -i "s|BOT_TOKEN=.*|BOT_TOKEN=$bot_token|" .env
     
+    # Add PROJECT_NAME to .env
+    project_name_sanitized=$(echo "$folder_name" | tr -cd '[:alnum:]-')
+    echo "" >> .env
+    echo "# Project Name (used for container names and Traefik routers)" >> .env
+    echo "PROJECT_NAME=$project_name_sanitized" >> .env
+    
     if [ ! -z "$domain_name" ]; then
         sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=$domain_name|" .env
         # Uncomment Traefik labels
         sed -i 's/# labels:/labels:/' docker-compose.yml
         sed -i 's/#   - "traefik/  - "traefik/g' docker-compose.yml
-        
-        # Update router names
-        router_name=$(echo "$folder_name" | tr -cd '[:alnum:]-')
-        sed -i "s/traefik.http.routers.my-bot/traefik.http.routers.$router_name/g" docker-compose.yml
-        sed -i "s/traefik.http.services.my-bot/traefik.http.services.$router_name/g" docker-compose.yml
     fi
-    
-    # Update container name
-    sed -i "s/container_name: my-bot-project/container_name: $folder_name/" docker-compose.yml
     
     # Update network name in docker-compose files
     if [ "$traefik_network" != "proxy-public" ]; then
