@@ -179,68 +179,134 @@ setup_traefik() {
     cd "$TARGET_DIR" || exit
     
     read -p "Enter email for Let's Encrypt SSL: " email
-    
-    cp .env.example .env
-    # Use | as delimiter to avoid issues with special chars in email
-    sed -i "s|ACME_EMAIL=.*|ACME_EMAIL=$email|" .env
-    
-    # Also update email in traefik.yml
-    sed -i "s|EMAIL_PLACEHOLDER|$email|" traefik/traefik.yml
+
+    # Write .env (no in-place edits)
+    cat > .env <<EOF
+ACME_EMAIL=$email
+EOF
     
     chmod 600 traefik/acme.json
 
-    # Dashboard Setup
-    ask_yes_no "Do you want to enable the Traefik Dashboard with Basic Auth?"
-    if [ $? -eq 0 ]; then
-        read -p "Enter Dashboard Domain (e.g. traefik.yourdomain.com): " dashboard_domain
-        read -p "Enter Dashboard Username: " dashboard_user
-        read -s -p "Enter Dashboard Password: " dashboard_pass
-        echo ""
-        
-        echo -e "${BLUE}>>> Generating password hash...${NC}"
-        if ! docker image inspect httpd:alpine &> /dev/null; then
-             echo "Pulling helper image..."
-             docker pull -q httpd:alpine
-        fi
-        
-        # Generate hash: user:$apr1$xyz...
-        hash=$(docker run --rm httpd:alpine htpasswd -Bbn "$dashboard_user" "$dashboard_pass")
-        
-        # Escape $ to $$ for docker-compose
-        docker_compose_hash=$(echo "$hash" | sed 's/\$/\$\$/g')
-        
-        # Disable insecure mode
-        sed -i 's/insecure: true/insecure: false/' traefik/traefik.yml
-        
-        # Remove port 8080
-        sed -i '/- "8080:8080"/d' docker-compose.yml
-        
-        # Add labels using awk to insert before '    networks:'
-        LABELS="    labels:
-      - \"traefik.enable=true\"
-      - \"traefik.http.routers.dashboard.rule=Host(\`$dashboard_domain\`)\"
-      - \"traefik.http.routers.dashboard.service=api@internal\"
-      - \"traefik.http.routers.dashboard.middlewares=auth,dashboard-redirect\"
-      - \"traefik.http.middlewares.auth.basicauth.users=$docker_compose_hash\"
-      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.regex=^https?://[^/]+/\$\$\"
-      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.replacement=https://$dashboard_domain/dashboard/\"
-      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.permanent=true\"
-      - \"traefik.http.routers.dashboard.entrypoints=https\"
-      - \"traefik.http.routers.dashboard.tls.certresolver=myresolver\""
+        # Dashboard Setup
+        ask_yes_no "Do you want to enable the Traefik Dashboard with Basic Auth?"
+        if [ $? -eq 0 ]; then
+                enable_dashboard="y"
+                read -p "Enter Dashboard Domain (e.g. traefik.yourdomain.com): " dashboard_domain
+                read -p "Enter Dashboard Username: " dashboard_user
+                read -s -p "Enter Dashboard Password: " dashboard_pass
+                echo ""
 
-        awk -v labels="$LABELS" '{
-            # Match exactly "    networks:" (4 spaces) to avoid matching root "networks:"
-            if ($0 == "    networks:" && !found) {
-                print labels
-                found=1
-            }
-            print $0
-        }' docker-compose.yml > docker-compose.tmp && mv docker-compose.tmp docker-compose.yml
-        
-        enable_dashboard="y" # Set for later use
-    else
-        enable_dashboard="n"
-    fi
+                echo -e "${BLUE}>>> Generating password hash...${NC}"
+                if ! docker image inspect httpd:alpine &> /dev/null; then
+                         echo "Pulling helper image..."
+                         docker pull -q httpd:alpine
+                fi
+
+                hash=$(docker run --rm httpd:alpine htpasswd -Bbn "$dashboard_user" "$dashboard_pass")
+                # Escape $ -> $$ for docker-compose label values
+                docker_compose_hash="${hash//\$/\$\$}"
+        else
+                enable_dashboard="n"
+        fi
+
+        # Generate traefik.yml (no in-place edits)
+        if [[ "$enable_dashboard" =~ ^[Yy]$ ]]; then
+                insecure_value="false"
+        else
+                insecure_value="true"
+        fi
+
+        cat > traefik/traefik.yml <<EOF
+global:
+    checkNewVersion: true
+    sendAnonymousUsage: false
+
+api:
+    dashboard: true
+    insecure: $insecure_value
+
+providers:
+    docker:
+        endpoint: "unix:///var/run/docker.sock"
+        exposedByDefault: false
+    file:
+        filename: /etc/traefik/dynamic.yml
+        watch: true
+
+entryPoints:
+    http:
+        address: ":80"
+        http:
+            redirections:
+                entryPoint:
+                    to: https
+                    scheme: https
+
+    https:
+        address: ":443"
+
+certificatesResolvers:
+    myresolver:
+        acme:
+            email: "$email"
+            storage: "/acme.json"
+            httpChallenge:
+                entryPoint: http
+EOF
+
+        # Generate docker-compose.yml (no in-place edits)
+        cat > docker-compose.yml <<EOF
+services:
+    traefik:
+        image: traefik:v3.6
+        container_name: traefik
+        restart: unless-stopped
+        security_opt:
+            - no-new-privileges:true
+        environment:
+            - DOCKER_API_VERSION=1.44
+        command:
+            - "--configFile=/etc/traefik/traefik.yml"
+        ports:
+            - "80:80"
+            - "443:443"
+EOF
+
+        if [[ "$enable_dashboard" =~ ^[Yy]$ ]]; then
+                cat >> docker-compose.yml <<EOF
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.dashboard.rule=Host(\`$dashboard_domain\`)"
+            - "traefik.http.routers.dashboard.service=api@internal"
+            - "traefik.http.routers.dashboard.middlewares=auth,dashboard-redirect"
+            - "traefik.http.middlewares.auth.basicauth.users=$docker_compose_hash"
+            - "traefik.http.middlewares.dashboard-redirect.redirectregex.regex=^https?://[^/]+/\$\$"
+            - "traefik.http.middlewares.dashboard-redirect.redirectregex.replacement=https://$dashboard_domain/dashboard/"
+            - "traefik.http.middlewares.dashboard-redirect.redirectregex.permanent=true"
+            - "traefik.http.routers.dashboard.entrypoints=https"
+            - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
+EOF
+        else
+                # Keep insecure dashboard port for dev-only usage
+                cat >> docker-compose.yml <<EOF
+            # Dashboard port (insecure mode - for dev only, or protect with middleware)
+            - "8080:8080"
+EOF
+        fi
+
+        cat >> docker-compose.yml <<EOF
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+            - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+            - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+            - ./traefik/acme.json:/acme.json
+        networks:
+            - proxy-public
+
+networks:
+    proxy-public:
+        name: proxy-public
+EOF
     
     # Ensure proxy-public network exists
     if ! docker network inspect proxy-public >/dev/null 2>&1; then
@@ -302,7 +368,9 @@ setup_web() {
              traefik_network="$selected"
         fi
     else
-        read -p "Enter the PRODUCTION domain (e.g., example.com): " domain_name
+        # VPS mode: don't ask for deploy variables here.
+        # DOMAIN_NAME / TRAEFIK_NETWORK should be provided via GitHub/GitLab secrets/variables during deployment.
+        domain_name=""
     fi
     
     if [ -d "$folder_name" ]; then
@@ -354,33 +422,8 @@ setup_web() {
     cp -r "$TEMPLATES_DIR/web/.github" "$folder_name/" 2>/dev/null || true
     cp "$TEMPLATES_DIR/web/.gitlab-ci.yml" "$folder_name/" 2>/dev/null || true
     
-    # Configure next.config.js/mjs/ts for standalone output (Required for Dockerfile)
-    CONFIG_FILE=""
-    if [ -f "$folder_name/next.config.js" ]; then CONFIG_FILE="$folder_name/next.config.js"; fi
-    if [ -f "$folder_name/next.config.mjs" ]; then CONFIG_FILE="$folder_name/next.config.mjs"; fi
-    if [ -f "$folder_name/next.config.ts" ]; then CONFIG_FILE="$folder_name/next.config.ts"; fi
-    
-    if [ -n "$CONFIG_FILE" ]; then
-        # Check if output: 'standalone' is already there
-        if ! grep -q "standalone" "$CONFIG_FILE"; then
-            echo -e "${BLUE}>>> Configuring 'output: standalone' in $CONFIG_FILE...${NC}"
-            # Insert output: 'standalone' into the config object
-            # We look for "nextConfig = {" or "const nextConfig: NextConfig = {" and append the line
-            # The regex matches: nextConfig followed by any chars, then =, then any chars, then {
-            sed -i '/nextConfig.*=.*{/a \ \ output: "standalone",' "$CONFIG_FILE"
-        fi
-    else
-        echo -e "${YELLOW}Warning: Could not find next.config.{js,mjs,ts}. Please manually add 'output: \"standalone\"' to your config.${NC}"
-    fi
-    
-    # Enable Turbopack for local development
+    # Local dev compose (Turbopack is handled by docker-compose.dev.yml command)
     if [ "$ENV_TYPE" == "local" ]; then
-        if [ -f "$folder_name/package.json" ]; then
-            echo -e "${BLUE}>>> Enabling Turbopack for local development...${NC}"
-            sed -i 's/"dev": "next dev"/"dev": "next dev --turbo"/' "$folder_name/package.json"
-        fi
-        
-        # Copy docker-compose.dev.yml for local development
         echo -e "${BLUE}>>> Copying docker-compose.dev.yml for local development...${NC}"
         cp "$TEMPLATES_DIR/web/docker-compose.dev.yml" "$folder_name/"
     fi
@@ -401,53 +444,17 @@ setup_web() {
     fi
     
     cd "$folder_name" || exit
-    
-    cp .env.example .env
-    sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=$domain_name|" .env
-    
-    # Add PROJECT_NAME to .env
-    # We sanitize the folder name to ensure it's a valid Traefik router name
+
     project_name_sanitized=$(echo "$folder_name" | tr -cd '[:alnum:]-')
-    echo "" >> .env
-    echo "# Project Name (used for container names and Traefik routers)" >> .env
-    echo "PROJECT_NAME=$project_name_sanitized" >> .env
-    
-    # Update network name in docker-compose files
-    if [ "$traefik_network" != "proxy-public" ]; then
-        sed -i "s/proxy-public/$traefik_network/g" docker-compose.yml
-        if [ -f "docker-compose.dev.yml" ]; then
-            sed -i "s/proxy-public/$traefik_network/g" docker-compose.dev.yml
-        fi
-    fi
-    
-    # Update CI/CD paths
-    echo -e "\n${BLUE}>>> CI/CD Configuration${NC}"
-    
+
+    # Local mode: create .env interactively.
+    # VPS mode: do NOT create .env here; CI/CD should generate it from GitHub/GitLab variables.
     if [ "$ENV_TYPE" == "local" ]; then
-        echo "Since you are running locally, we need to know where the project will be on your VPS."
-        read -p "Enter the absolute path on VPS (e.g., /root/projects/$folder_name): " remote_path
-        
-        if [ -z "$remote_path" ]; then
-            remote_path="/root/projects/$folder_name"
-            echo -e "Using default: $remote_path"
-        fi
-        PROJECT_PATH="$remote_path"
-    else
-        # On VPS, the current path is the project path
-        PROJECT_PATH=$(pwd)
-        echo -e "Using current path for CI/CD: $PROJECT_PATH"
-    fi
-    
-    # Update GitHub Actions
-    if [ -f ".github/workflows/main.yml" ]; then
-        sed -i "s|cd /path/to/your/web-project|cd $PROJECT_PATH|" .github/workflows/main.yml
-        sed -i "s|PROJECT_NAME=PROJECT_NAME_PLACEHOLDER|PROJECT_NAME=$project_name_sanitized|" .github/workflows/main.yml
-    fi
-    
-    # Update GitLab CI
-    if [ -f ".gitlab-ci.yml" ]; then
-        sed -i "s|cd /path/to/your/web-project|cd $PROJECT_PATH|" .gitlab-ci.yml
-        sed -i "s|PROJECT_NAME=PROJECT_NAME_PLACEHOLDER|PROJECT_NAME=$project_name_sanitized|" .gitlab-ci.yml
+        cat > .env <<EOF
+PROJECT_NAME=$project_name_sanitized
+DOMAIN_NAME=$domain_name
+TRAEFIK_NETWORK=$traefik_network
+EOF
     fi
     
     # Initialize new git repo
@@ -505,7 +512,9 @@ setup_bot() {
              traefik_network="$selected"
         fi
     else
-        read -p "Enter the PRODUCTION domain (optional, e.g., bot.example.com): " domain_name
+        # VPS mode: don't ask for deploy variables here.
+        # BOT_TOKEN / DOMAIN_NAME / TRAEFIK_* should be provided via GitHub/GitLab secrets/variables during deployment.
+        domain_name=""
     fi
     
     if [ -d "$folder_name" ]; then
@@ -516,25 +525,28 @@ setup_bot() {
     cp -r "$TEMPLATES_DIR/bot" "$folder_name"
     cd "$folder_name" || exit
     
-    cp .env.example .env
-    sed -i "s|BOT_TOKEN=.*|BOT_TOKEN=$bot_token|" .env
-    
-    # Add PROJECT_NAME to .env
     project_name_sanitized=$(echo "$folder_name" | tr -cd '[:alnum:]-')
-    echo "" >> .env
-    echo "# Project Name (used for container names and Traefik routers)" >> .env
-    echo "PROJECT_NAME=$project_name_sanitized" >> .env
-    
-    if [ ! -z "$domain_name" ]; then
-        sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=$domain_name|" .env
-        # Uncomment Traefik labels
-        sed -i 's/# labels:/labels:/' docker-compose.yml
-        sed -i 's/#   - "traefik/  - "traefik/g' docker-compose.yml
-    fi
-    
-    # Update network name in docker-compose files
-    if [ "$traefik_network" != "proxy-public" ]; then
-        sed -i "s/proxy-public/$traefik_network/g" docker-compose.yml
+
+    if [ "$ENV_TYPE" == "local" ]; then
+        cat > .env <<EOF
+PROJECT_NAME=$project_name_sanitized
+BOT_TOKEN=$bot_token
+DOMAIN_NAME=$domain_name
+TRAEFIK_NETWORK=$traefik_network
+TRAEFIK_ENABLE=false
+EOF
+
+        # If user provided a domain, assume webhooks via Traefik are desired.
+        if [ -n "$domain_name" ]; then
+            # Rewrite .env with TRAEFIK_ENABLE=true
+            cat > .env <<EOF
+PROJECT_NAME=$project_name_sanitized
+BOT_TOKEN=$bot_token
+DOMAIN_NAME=$domain_name
+TRAEFIK_NETWORK=$traefik_network
+TRAEFIK_ENABLE=true
+EOF
+        fi
     fi
 
     # Ensure proxy-public network exists
@@ -550,33 +562,7 @@ setup_bot() {
         fi
     fi
     
-    # Update CI/CD paths
-    echo -e "\n${BLUE}>>> CI/CD Configuration${NC}"
-    
-    if [ "$ENV_TYPE" == "local" ]; then
-        echo "Since you are running locally, we need to know where the project will be on your VPS."
-        read -p "Enter the absolute path on VPS (e.g., /root/projects/$folder_name): " remote_path
-        if [ -z "$remote_path" ]; then
-            remote_path="/root/projects/$folder_name"
-            echo -e "Using default: $remote_path"
-        fi
-        PROJECT_PATH="$remote_path"
-    else
-        PROJECT_PATH=$(pwd)
-        echo -e "Using current path for CI/CD: $PROJECT_PATH"
-    fi
-    
-    # Update GitHub Actions
-    if [ -f ".github/workflows/main.yml" ]; then
-        sed -i "s|cd /path/to/your/bot-project|cd $PROJECT_PATH|" .github/workflows/main.yml
-        sed -i "s|PROJECT_NAME=PROJECT_NAME_PLACEHOLDER|PROJECT_NAME=$project_name_sanitized|" .github/workflows/main.yml
-    fi
-    
-    # Update GitLab CI
-    if [ -f ".gitlab-ci.yml" ]; then
-        sed -i "s|cd /path/to/your/bot-project|cd $PROJECT_PATH|" .gitlab-ci.yml
-        sed -i "s|PROJECT_NAME=PROJECT_NAME_PLACEHOLDER|PROJECT_NAME=$project_name_sanitized|" .gitlab-ci.yml
-    fi
+    # CI/CD is configured via GitHub/GitLab variables; install.sh does not patch CI files.
     
     # Initialize new git repo
     git init -q

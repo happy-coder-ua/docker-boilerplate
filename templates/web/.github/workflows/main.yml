@@ -28,11 +28,12 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /path/to/your/web-project
+            cd ${{ secrets.PROJECT_PATH }}
             git pull origin main
             # Create/Update .env from secrets
-            echo "PROJECT_NAME=PROJECT_NAME_PLACEHOLDER" > .env
+            echo "PROJECT_NAME=${{ secrets.PROJECT_NAME }}" > .env
             echo "DOMAIN_NAME=${{ secrets.DOMAIN_NAME }}" >> .env
+            echo "TRAEFIK_NETWORK=${{ secrets.TRAEFIK_NETWORK }}" >> .env
             # You can add more variables here:
             # echo "ANOTHER_VAR=${{ secrets.ANOTHER_VAR }}" >> .env
             

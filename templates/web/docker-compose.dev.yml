@@ -4,7 +4,7 @@ services:
       context: .
       target: deps
     container_name: ${PROJECT_NAME?PROJECT_NAME must be set}-dev
-    command: npm run dev
+    command: npm run dev -- --turbo
     volumes:
       - .:/app
       - /app/node_modules
@@ -18,3 +18,4 @@ services:
 networks:
   proxy-public:
     external: true
+    name: ${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}
