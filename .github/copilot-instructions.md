@@ -1,38 +1,36 @@
-# Docker Boilerplate Generator Instructions
+# Docker Boilerplate Generator (Agent Instructions)
 
-This repository is a **Generator**, not a standalone application. It uses `install.sh` to spawn independent Docker-based projects (Web, Bot, Traefik) from blueprints in `templates/`.
+This repository is a **generator**, not a deployable app. The only “runtime” is `install.sh`, which scaffolds independent projects from `templates/`.
 
-## Language & Communication
-- **Chat/Conversation**: Ukrainian (Українська).
-- **Code, Comments, Documentation**: English.
+## Language
+- Chat: Ukrainian.
+- Code/comments/docs: English.
 
-## Architecture & Data Flow
-- **`install.sh`**: The core logic. It prompts the user, copies files from `templates/`, and uses `sed` to inject configuration (Domain, Email, Project Name).
-- **`templates/`**: Contains the "source code" for generated projects.
-  - `nextjs/`: Next.js + Docker (Standalone mode).
-  - `bot/`: Node.js Telegram Bot.
-  - `traefik/`: Global reverse proxy configuration.
-- **Networking**: All generated services connect to an external Docker network named `proxy-public` to be exposed via Traefik.
+## Big Picture
+- Core entrypoint: `install.sh` (interactive TUI with ↑/↓, generates projects in the current directory).
+- Blueprints live in `templates/`:
+  - `templates/traefik/`: global proxy (Traefik) project.
+  - `templates/nextjs/`: Next.js web app (Docker + CI/CD).
+  - `templates/vite-react/`: React + Vite web app (Docker + CI/CD).
+  - `templates/bot/`: Node.js Telegram bot (Docker + CI/CD).
 
-## Development Workflow
-1.  **Modify Templates**: To change how future projects look, edit files in `templates/`.
-2.  **Modify Logic**: To change *how* projects are created (e.g., permission fixes, prompts), edit `install.sh`.
-3.  **Test**: Run `./install.sh` locally to generate a dummy project.
-    - *Do not* commit the generated dummy project.
-    - Verify `docker-compose.yml` and `.env` in the generated folder.
+## Non-Negotiable Conventions
+- **No in-place patching**: avoid `sed -i`/mutating copied files after the fact. Prefer copying templates as-is and writing `.env` via heredocs.
+- **Env-driven Compose**: templates rely on `PROJECT_NAME`, `DOMAIN_NAME`, `TRAEFIK_NETWORK` (and `ACME_EMAIL` for Traefik). Use `${VAR?message}` in compose to fail fast.
+- **Networking**: services must join an external Traefik network (default `proxy-public`). Compose should keep:
+  - `networks: proxy-public: external: true`
+  - `name: ${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}`
+- **Traefik labels**: route by host and use `entrypoints=https` (see templates’ `docker-compose.yml`).
 
-## Project-Specific Patterns
-- **Permission Handling**: `install.sh` must handle file ownership. Since `create-next-app` runs in Docker (often as root), the script explicitly fixes permissions using `sudo chown` or Docker-based `chown`.
-- **Environment Variables**:
-  - **Local**: `DOMAIN_NAME` is set in `.env` (e.g., `app.docker.localhost`).
-  - **Production**: CI/CD templates (`.github`, `.gitlab-ci.yml`) inject `DOMAIN_NAME` from Secrets/Variables during deployment.
-- **Next.js Generation**: The script runs `npx create-next-app` inside a temporary Docker container to avoid local Node.js dependencies. It then patches `next.config.js` to ensure `output: "standalone"`.
+## Generator Implementation Notes
+- Project creation uses Dockerized Node tooling (e.g., `node:lts-alpine` + `npm create ...`) to avoid local Node installs.
+- File ownership can still get messy; keep the existing “fix permissions” approach (Docker `--user` first, fallback `sudo chown`).
 
-## Common Commands
-- **Run Generator**: `./install.sh`
-- **Clean Up Test**: `sudo rm -rf <generated-folder-name>` (often required due to Docker permissions).
+## CI/CD Pattern (Templates)
+- `.env` is **not committed**; CI creates it on the server during deploy.
+- GitHub Actions uses a **reusable workflow** (`.github/workflows/deploy.yml`) called by `main.yml`.
+- Gating: do not rely on `secrets.*` in `jobs.<id>.if` (context restrictions). Use `vars.*` for job-level gating; validate secrets inside the reusable workflow.
 
-## Critical Rules
-- **Never hardcode domains** in templates. Use placeholders or `sed` replacement targets.
-- **Preserve `proxy-public`**: All `docker-compose.yml` templates must define this external network.
-- **CI/CD**: Ensure templates include logic to generate `.env` files on the remote server, as they are not committed to Git.
+## Developer Workflow
+- Change future generated projects by editing `templates/**` (not by editing generated repos).
+- Smoke test: run `./install.sh`, generate a dummy project, verify `.env` + `docker-compose*.yml`, then delete the dummy folder (may require `sudo rm -rf`).
