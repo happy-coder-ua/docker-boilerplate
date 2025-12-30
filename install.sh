@@ -396,16 +396,16 @@ setup_web() {
     echo -e "${BLUE}>>> Applying Docker boilerplate configuration...${NC}"
     
     # Copy Docker-related files from template
-    cp "$TEMPLATES_DIR/web/Dockerfile" "$folder_name/"
-    cp "$TEMPLATES_DIR/web/docker-compose.yml" "$folder_name/"
-    cp "$TEMPLATES_DIR/web/.env.example" "$folder_name/"
-    cp "$TEMPLATES_DIR/web/README.md" "$folder_name/README-DOCKER.md"
-    cp -r "$TEMPLATES_DIR/web/.github" "$folder_name/" 2>/dev/null || true
-    cp "$TEMPLATES_DIR/web/.gitlab-ci.yml" "$folder_name/" 2>/dev/null || true
+    cp "$TEMPLATES_DIR/nextjs/Dockerfile" "$folder_name/"
+    cp "$TEMPLATES_DIR/nextjs/docker-compose.yml" "$folder_name/"
+    cp "$TEMPLATES_DIR/nextjs/.env.example" "$folder_name/"
+    cp "$TEMPLATES_DIR/nextjs/README.md" "$folder_name/README-DOCKER.md"
+    cp -r "$TEMPLATES_DIR/nextjs/.github" "$folder_name/" 2>/dev/null || true
+    cp "$TEMPLATES_DIR/nextjs/.gitlab-ci.yml" "$folder_name/" 2>/dev/null || true
     
     # Local dev compose (Turbopack is handled by docker-compose.dev.yml command)
     echo -e "${BLUE}>>> Copying docker-compose.dev.yml for local development...${NC}"
-    cp "$TEMPLATES_DIR/web/docker-compose.dev.yml" "$folder_name/"
+    cp "$TEMPLATES_DIR/nextjs/docker-compose.dev.yml" "$folder_name/"
     
     # Ensure proxy-public network exists (in case user skipped Traefik setup)
     # If user specified a custom network, we assume it exists or they will create it.

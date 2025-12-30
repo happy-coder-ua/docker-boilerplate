@@ -9,7 +9,7 @@ This repository is a **Generator**, not a standalone application. It uses `insta
 ## Architecture & Data Flow
 - **`install.sh`**: The core logic. It prompts the user, copies files from `templates/`, and uses `sed` to inject configuration (Domain, Email, Project Name).
 - **`templates/`**: Contains the "source code" for generated projects.
-  - `web/`: Next.js + Docker (Standalone mode).
+  - `nextjs/`: Next.js + Docker (Standalone mode).
   - `bot/`: Node.js Telegram Bot.
   - `traefik/`: Global reverse proxy configuration.
 - **Networking**: All generated services connect to an external Docker network named `proxy-public` to be exposed via Traefik.
