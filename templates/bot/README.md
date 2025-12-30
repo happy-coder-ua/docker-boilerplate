@@ -22,6 +22,16 @@ This project is not meant to be generated on a VPS.
     docker compose up -d --build
     ```
 
+## Make Commands
+
+If you prefer short commands, use the included `Makefile`:
+
+```bash
+make up
+make down
+make logs
+```
+
 ## Production Deploy (CI/CD)
 
 - Do **not** commit `.env`.
