@@ -1,0 +1,24 @@
+name: Test Templates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    name: Smoke test templates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker info
+        run: |
+          docker version
+          docker compose version
+
+      - name: Run smoke tests
+        run: |
+          chmod +x tests/smoke/run.sh
+          ./tests/smoke/run.sh
