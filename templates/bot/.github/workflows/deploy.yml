@@ -3,6 +3,9 @@ name: Deploy (reusable)
 on:
   workflow_call:
     inputs:
+      GIT_BRANCH:
+        required: false
+        type: string
       SERVER_HOST:
         required: true
         type: string
@@ -16,40 +19,40 @@ on:
         required: true
         type: string
       DOMAIN_NAME:
-        required: false
+        required: true
         type: string
       TRAEFIK_NETWORK:
         required: true
         type: string
-      TRAEFIK_ENABLE:
+      ADMIN_IDS:
         required: false
         type: string
-        default: "false"
     secrets:
       SSH_PRIVATE_KEY:
         required: true
       BOT_TOKEN:
-        required: true
+        required: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
+      GIT_BRANCH: ${{ inputs.GIT_BRANCH }}
       SERVER_HOST: ${{ inputs.SERVER_HOST }}
       SERVER_USER: ${{ inputs.SERVER_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       PROJECT_PATH: ${{ inputs.PROJECT_PATH }}
       PROJECT_NAME: ${{ inputs.PROJECT_NAME }}
-      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
       DOMAIN_NAME: ${{ inputs.DOMAIN_NAME }}
       TRAEFIK_NETWORK: ${{ inputs.TRAEFIK_NETWORK }}
-      TRAEFIK_ENABLE: ${{ inputs.TRAEFIK_ENABLE }}
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      ADMIN_IDS: ${{ inputs.ADMIN_IDS }}
     steps:
       - name: Validate required secrets
         run: |
           set -euo pipefail
           missing=0
-          for key in SERVER_HOST SERVER_USER SSH_PRIVATE_KEY PROJECT_PATH PROJECT_NAME BOT_TOKEN TRAEFIK_NETWORK; do
+          for key in SERVER_HOST SERVER_USER SSH_PRIVATE_KEY PROJECT_PATH PROJECT_NAME DOMAIN_NAME TRAEFIK_NETWORK; do
             if [ -z "${!key}" ]; then
               echo "Missing required secret: $key" >&2
               missing=1
@@ -66,14 +69,63 @@ jobs:
           username: ${{ env.SERVER_USER }}
           key: ${{ env.SSH_PRIVATE_KEY }}
           script: |
+            set -euo pipefail
+
+            if [ -z "${PROJECT_PATH:-}" ]; then
+              echo "PROJECT_PATH is empty" >&2
+              exit 1
+            fi
+
+            if [ ! -d "$PROJECT_PATH" ]; then
+              echo "PROJECT_PATH does not exist: $PROJECT_PATH" >&2
+              echo "Create it and clone the repo there, e.g.:" >&2
+              echo "  git clone <repo_url> $PROJECT_PATH" >&2
+              exit 1
+            fi
+
             cd "$PROJECT_PATH"
-            git pull origin ${{ github.ref_name }}
-            # Create/Update .env from secrets
-            echo "PROJECT_NAME=$PROJECT_NAME" > .env
-            echo "BOT_TOKEN=$BOT_TOKEN" >> .env
-            echo "DOMAIN_NAME=$DOMAIN_NAME" >> .env
-            echo "TRAEFIK_NETWORK=$TRAEFIK_NETWORK" >> .env
-            echo "TRAEFIK_ENABLE=${TRAEFIK_ENABLE:-false}" >> .env
+
+            if [ ! -d .git ]; then
+              echo "Not a git repository: $PROJECT_PATH (missing .git)" >&2
+              echo "Fix: clone the repository into PROJECT_PATH or point PROJECT_PATH to the repo root." >&2
+              exit 1
+            fi
+
+            if [ ! -f docker-compose.yml ]; then
+              echo "docker-compose.yml not found in $PROJECT_PATH" >&2
+              echo "Fix: ensure the repository was cloned correctly and PROJECT_PATH points to its root." >&2
+              exit 1
+            fi
+
+            branch="${GIT_BRANCH:-}"
+            if [ -z "$branch" ]; then branch="main"; fi
+            git pull origin "$branch"
+
+            # Create/Update .env from CI variables.
+            # Preserve existing BOT_TOKEN / ADMIN_IDS env unless the CI provides new values.
+            existing_bot_token=""
+            existing_admin_ids=""
+            if [ -f .env ]; then
+              existing_bot_token="$(grep -E '^BOT_TOKEN=' .env | tail -n 1 || true)"
+              existing_admin_ids="$(grep -E '^ADMIN_IDS=' .env | tail -n 1 || true)"
+            fi
+
+            : > .env
+            printf '%s\n' "PROJECT_NAME=$PROJECT_NAME" >> .env
+            printf '%s\n' "DOMAIN_NAME=$DOMAIN_NAME" >> .env
+            printf '%s\n' "TRAEFIK_NETWORK=$TRAEFIK_NETWORK" >> .env
+
+            if [ -n "${BOT_TOKEN:-}" ]; then
+              printf '%s\n' "BOT_TOKEN=$BOT_TOKEN" >> .env
+            elif [ -n "$existing_bot_token" ]; then
+              printf '%s\n' "$existing_bot_token" >> .env
+            fi
+
+            if [ -n "${ADMIN_IDS:-}" ]; then
+              printf '%s\n' "ADMIN_IDS=$ADMIN_IDS" >> .env
+            elif [ -n "$existing_admin_ids" ]; then
+              printf '%s\n' "$existing_admin_ids" >> .env
+            fi
 
             docker compose up -d --build
             docker image prune -f
