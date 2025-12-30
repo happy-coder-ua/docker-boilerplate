@@ -374,7 +374,7 @@ setup_web() {
     # We use -it to allow interactive prompts
     # We use --user to ensure files are created with the current user's permissions
     # We set HOME=/tmp to avoid permission issues with npm cache in /root
-    docker run --rm -it -v "$(pwd):/work" -w /work -e HOME=/tmp --user "$(id -u):$(id -g)" node:lts-alpine \
+    docker run --rm -it -v "$(pwd):/work" -w /work -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro -e HOME=/tmp --user "$(id -u):$(id -g)" node:lts-alpine \
         npx create-next-app@latest "$folder_name"
         
     if [ ! -d "$folder_name" ]; then
@@ -499,7 +499,7 @@ setup_vite_react() {
     fi
 
     echo -e "${BLUE}>>> Running create-vite@latest via Docker...${NC}"
-    docker run --rm -it -v "$(pwd):/work" -w /work -e HOME=/tmp --user "$(id -u):$(id -g)" node:lts-alpine \
+    docker run --rm -it -v "$(pwd):/work" -w /work -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro -e HOME=/tmp --user "$(id -u):$(id -g)" node:lts-alpine \
         sh -lc "npm create --yes vite@latest \"$folder_name\" -- --template react && cd \"$folder_name\" && npm install"
 
     if [ ! -d "$folder_name" ]; then

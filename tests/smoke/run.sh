@@ -78,6 +78,8 @@ mkdir -p "$TMP"
 # Generate a real Next.js app (non-interactive)
 docker run --rm \
   -v "$TMP:/work" -w /work \
+  -v /etc/passwd:/etc/passwd:ro \
+  -v /etc/group:/etc/group:ro \
   -e HOME=/tmp \
   --user "$USER_ID:$GROUP_ID" \
   node:lts-alpine \
@@ -109,6 +111,8 @@ VITE_DIR="$TMP/vite-app"
 
 docker run --rm \
   -v "$TMP:/work" -w /work \
+  -v /etc/passwd:/etc/passwd:ro \
+  -v /etc/group:/etc/group:ro \
   -e HOME=/tmp \
   --user "$USER_ID:$GROUP_ID" \
   node:lts-alpine \
