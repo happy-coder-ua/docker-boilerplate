@@ -67,7 +67,7 @@ jobs:
           key: ${{ env.SSH_PRIVATE_KEY }}
           script: |
             cd "$PROJECT_PATH"
-            git pull origin main
+            git pull origin ${{ github.ref_name }}
             # Create/Update .env from secrets
             echo "PROJECT_NAME=$PROJECT_NAME" > .env
             echo "BOT_TOKEN=$BOT_TOKEN" >> .env
