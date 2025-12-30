@@ -12,6 +12,13 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${PROJECT_NAME}-dev.rule=Host(`${DOMAIN_NAME?DOMAIN_NAME must be set}`)"
+      - "traefik.http.routers.${PROJECT_NAME}-dev.entrypoints=https"
+      - "traefik.http.routers.${PROJECT_NAME}-dev.tls=true"
+      - "traefik.http.services.${PROJECT_NAME}-dev.loadbalancer.server.port=3000"
+      - "traefik.docker.network=${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}"
     networks:
       - proxy-public
 
