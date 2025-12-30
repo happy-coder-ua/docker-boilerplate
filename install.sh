@@ -137,24 +137,10 @@ if ! command -v docker &> /dev/null; then
     fi
 fi
 
-# Interactive Environment Selection
 ENV_TYPE="local"
-ask_environment() {
-    local options=("Local Computer (Development)" "VPS Server (Production)")
-    interactive_menu "Docker Project Generator v1.2.0" "${options[@]}"
-    local choice=$?
-
-    if [ $choice -eq 0 ]; then
-        ENV_TYPE="local"
-        echo -e "${GREEN}>>> Mode: Local Development${NC}"
-    else
-        ENV_TYPE="vps"
-        echo -e "${RED}>>> Mode: VPS Production${NC}"
-    fi
-    echo ""
-}
-
-ask_environment
+echo -e "${GREEN}>>> Mode: Local Development (only)${NC}"
+echo -e "${BLUE}>>> Generate locally -> push to git -> CI/CD deploys to VPS.${NC}"
+echo ""
 
 # Function to setup Traefik
 setup_traefik() {
@@ -331,46 +317,40 @@ setup_web() {
     read -p "Enter project name (folder name): " folder_name
     
     traefik_network="proxy-public"
-    if [ "$ENV_TYPE" == "local" ]; then
-        echo -e "Enter the domain for your LOCAL environment (e.g., ${folder_name}.docker.localhost)."
-        read -p "Local Domain [${folder_name}.docker.localhost]: " domain_name
-        [ -z "$domain_name" ] && domain_name="${folder_name}.docker.localhost"
-        
-        # Network Selection
-        networks=()
-        while IFS= read -r line; do
-            [ -n "$line" ] && networks+=("$line")
-        done < <(docker network ls --format "{{.Name}}" | grep -v "bridge\|host\|none")
+    echo -e "Enter the domain for your LOCAL environment (e.g., ${folder_name}.docker.localhost)."
+    read -p "Local Domain [${folder_name}.docker.localhost]: " domain_name
+    [ -z "$domain_name" ] && domain_name="${folder_name}.docker.localhost"
+    
+    # Network Selection
+    networks=()
+    while IFS= read -r line; do
+        [ -n "$line" ] && networks+=("$line")
+    done < <(docker network ls --format "{{.Name}}" | grep -v "bridge\|host\|none")
 
-        # Check if proxy-public exists in the list
-        local found_proxy=0
-        for n in "${networks[@]}"; do
-            if [[ "$n" == "proxy-public" ]]; then
-                found_proxy=1
-                break
-            fi
-        done
-        
-        if [ $found_proxy -eq 0 ]; then
-            networks+=("proxy-public (Create new)")
+    # Check if proxy-public exists in the list
+    local found_proxy=0
+    for n in "${networks[@]}"; do
+        if [[ "$n" == "proxy-public" ]]; then
+            found_proxy=1
+            break
         fi
-        networks+=("Manual Input")
-        
-        interactive_menu "Select Docker Network for Traefik" "${networks[@]}"
-        local net_choice=$?
-        local selected="${networks[$net_choice]}"
-        
-        if [[ "$selected" == "Manual Input" ]]; then
-             read -p "Enter Docker Network Name: " traefik_network
-        elif [[ "$selected" == "proxy-public (Create new)" ]]; then
-             traefik_network="proxy-public"
-        else
-             traefik_network="$selected"
-        fi
+    done
+    
+    if [ $found_proxy -eq 0 ]; then
+        networks+=("proxy-public (Create new)")
+    fi
+    networks+=("Manual Input")
+    
+    interactive_menu "Select Docker Network for Traefik" "${networks[@]}"
+    local net_choice=$?
+    local selected="${networks[$net_choice]}"
+    
+    if [[ "$selected" == "Manual Input" ]]; then
+         read -p "Enter Docker Network Name: " traefik_network
+    elif [[ "$selected" == "proxy-public (Create new)" ]]; then
+         traefik_network="proxy-public"
     else
-        # VPS mode: don't ask for deploy variables here.
-        # DOMAIN_NAME / TRAEFIK_NETWORK should be provided via GitHub/GitLab secrets/variables during deployment.
-        domain_name=""
+         traefik_network="$selected"
     fi
     
     if [ -d "$folder_name" ]; then
@@ -423,10 +403,8 @@ setup_web() {
     cp "$TEMPLATES_DIR/web/.gitlab-ci.yml" "$folder_name/" 2>/dev/null || true
     
     # Local dev compose (Turbopack is handled by docker-compose.dev.yml command)
-    if [ "$ENV_TYPE" == "local" ]; then
-        echo -e "${BLUE}>>> Copying docker-compose.dev.yml for local development...${NC}"
-        cp "$TEMPLATES_DIR/web/docker-compose.dev.yml" "$folder_name/"
-    fi
+    echo -e "${BLUE}>>> Copying docker-compose.dev.yml for local development...${NC}"
+    cp "$TEMPLATES_DIR/web/docker-compose.dev.yml" "$folder_name/"
     
     # Ensure proxy-public network exists (in case user skipped Traefik setup)
     # If user specified a custom network, we assume it exists or they will create it.
@@ -447,15 +425,12 @@ setup_web() {
 
     project_name_sanitized=$(echo "$folder_name" | tr -cd '[:alnum:]-')
 
-    # Local mode: create .env interactively.
-    # VPS mode: do NOT create .env here; CI/CD should generate it from GitHub/GitLab variables.
-    if [ "$ENV_TYPE" == "local" ]; then
-        cat > .env <<EOF
+    # Create .env locally
+    cat > .env <<EOF
 PROJECT_NAME=$project_name_sanitized
 DOMAIN_NAME=$domain_name
 TRAEFIK_NETWORK=$traefik_network
 EOF
-    fi
     
     # Initialize new git repo
     git init -q
@@ -476,45 +451,39 @@ setup_bot() {
     read -p "Enter Bot Token: " bot_token
     
     traefik_network="proxy-public"
-    if [ "$ENV_TYPE" == "local" ]; then
-        echo -e "Enter the domain for your LOCAL environment (optional, e.g., ${folder_name}.docker.localhost)."
-        read -p "Local Domain: " domain_name
-        
-        # Network Selection
-        networks=()
-        while IFS= read -r line; do
-            [ -n "$line" ] && networks+=("$line")
-        done < <(docker network ls --format "{{.Name}}" | grep -v "bridge\|host\|none")
+    echo -e "Enter the domain for your LOCAL environment (optional, e.g., ${folder_name}.docker.localhost)."
+    read -p "Local Domain: " domain_name
+    
+    # Network Selection
+    networks=()
+    while IFS= read -r line; do
+        [ -n "$line" ] && networks+=("$line")
+    done < <(docker network ls --format "{{.Name}}" | grep -v "bridge\|host\|none")
 
-        # Check if proxy-public exists in the list
-        local found_proxy=0
-        for n in "${networks[@]}"; do
-            if [[ "$n" == "proxy-public" ]]; then
-                found_proxy=1
-                break
-            fi
-        done
-        
-        if [ $found_proxy -eq 0 ]; then
-            networks+=("proxy-public (Create new)")
+    # Check if proxy-public exists in the list
+    local found_proxy=0
+    for n in "${networks[@]}"; do
+        if [[ "$n" == "proxy-public" ]]; then
+            found_proxy=1
+            break
         fi
-        networks+=("Manual Input")
-        
-        interactive_menu "Select Docker Network for Traefik" "${networks[@]}"
-        local net_choice=$?
-        local selected="${networks[$net_choice]}"
-        
-        if [[ "$selected" == "Manual Input" ]]; then
-             read -p "Enter Docker Network Name: " traefik_network
-        elif [[ "$selected" == "proxy-public (Create new)" ]]; then
-             traefik_network="proxy-public"
-        else
-             traefik_network="$selected"
-        fi
+    done
+    
+    if [ $found_proxy -eq 0 ]; then
+        networks+=("proxy-public (Create new)")
+    fi
+    networks+=("Manual Input")
+    
+    interactive_menu "Select Docker Network for Traefik" "${networks[@]}"
+    local net_choice=$?
+    local selected="${networks[$net_choice]}"
+    
+    if [[ "$selected" == "Manual Input" ]]; then
+         read -p "Enter Docker Network Name: " traefik_network
+    elif [[ "$selected" == "proxy-public (Create new)" ]]; then
+         traefik_network="proxy-public"
     else
-        # VPS mode: don't ask for deploy variables here.
-        # BOT_TOKEN / DOMAIN_NAME / TRAEFIK_* should be provided via GitHub/GitLab secrets/variables during deployment.
-        domain_name=""
+         traefik_network="$selected"
     fi
     
     if [ -d "$folder_name" ]; then
@@ -527,8 +496,7 @@ setup_bot() {
     
     project_name_sanitized=$(echo "$folder_name" | tr -cd '[:alnum:]-')
 
-    if [ "$ENV_TYPE" == "local" ]; then
-        cat > .env <<EOF
+    cat > .env <<EOF
 PROJECT_NAME=$project_name_sanitized
 BOT_TOKEN=$bot_token
 DOMAIN_NAME=$domain_name
@@ -536,17 +504,16 @@ TRAEFIK_NETWORK=$traefik_network
 TRAEFIK_ENABLE=false
 EOF
 
-        # If user provided a domain, assume webhooks via Traefik are desired.
-        if [ -n "$domain_name" ]; then
-            # Rewrite .env with TRAEFIK_ENABLE=true
-            cat > .env <<EOF
+    # If user provided a domain, assume webhooks via Traefik are desired.
+    if [ -n "$domain_name" ]; then
+        # Rewrite .env with TRAEFIK_ENABLE=true
+        cat > .env <<EOF
 PROJECT_NAME=$project_name_sanitized
 BOT_TOKEN=$bot_token
 DOMAIN_NAME=$domain_name
 TRAEFIK_NETWORK=$traefik_network
 TRAEFIK_ENABLE=true
 EOF
-        fi
     fi
 
     # Ensure proxy-public network exists
