@@ -10,6 +10,7 @@ REPO_URL="https://github.com/happy-coder-ua/docker-boilerplate.git"
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 RED='\033[0;31m'
+YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
 # Interactive Menu Function
@@ -499,7 +500,7 @@ setup_vite_react() {
 
     echo -e "${BLUE}>>> Running create-vite@latest via Docker...${NC}"
     docker run --rm -it -v "$(pwd):/work" -w /work -e HOME=/tmp --user "$(id -u):$(id -g)" node:lts-alpine \
-        sh -lc "npm create vite@latest \"$folder_name\" -- --template react && cd \"$folder_name\" && npm install"
+        sh -lc "npm create --yes vite@latest \"$folder_name\" -- --template react && cd \"$folder_name\" && npm install"
 
     if [ ! -d "$folder_name" ]; then
         echo -e "${RED}Project generation failed or was cancelled.${NC}"
