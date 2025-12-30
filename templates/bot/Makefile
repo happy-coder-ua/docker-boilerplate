@@ -1,14 +1,24 @@
-.PHONY: help up down restart build ps logs
+.PHONY: help dev prod up down restart build ps logs
 
 COMPOSE ?= docker compose
 
+# Bot template has only one compose file, but we keep the same UX:
+#   make dev up / make prod up
+
 help:
-	@echo "Targets:"
-	@echo "  make up      Start stack (docker-compose.yml)"
-	@echo "  make down    Stop stack"
-	@echo "  make build   Build images"
-	@echo "  make logs    Follow logs"
-	@echo "  make ps      Show container status"
+	@echo "Usage:"
+	@echo "  make dev up"
+	@echo "  make dev down"
+	@echo "  make prod up"
+	@echo "  make prod down"
+	@echo ""
+	@echo "Other: make logs | make ps"
+
+dev:
+	@:
+
+prod:
+	@:
 
 up:
 	$(COMPOSE) up -d --build

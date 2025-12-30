@@ -27,11 +27,11 @@ This project is not meant to be generated on a VPS.
 If you prefer short commands, use the included `Makefile`:
 
 ```bash
-make dev        # start dev stack (Turbopack)
-make dev-down   # stop dev stack
-make up         # prod-like stack
-make down       # stop
-make logs       # follow logs
+make dev up
+make dev down
+make prod up
+make prod down
+make prod logs
 ```
 
 ## Production Deploy (CI/CD)

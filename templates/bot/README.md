@@ -27,8 +27,10 @@ This project is not meant to be generated on a VPS.
 If you prefer short commands, use the included `Makefile`:
 
 ```bash
-make up
-make down
+make dev up
+make dev down
+make prod up
+make prod down
 make logs
 ```
 
