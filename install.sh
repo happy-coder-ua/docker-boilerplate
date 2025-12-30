@@ -444,6 +444,119 @@ EOF
     echo -e "  4. docker compose up -d --build"
 }
 
+# Function to setup React + Vite
+setup_vite_react() {
+    echo -e "\n${BLUE}>>> Generating New React + Vite Project...${NC}"
+    read -p "Enter project name (folder name): " folder_name
+
+    traefik_network="proxy-public"
+    echo -e "Enter the domain for your LOCAL environment (e.g., ${folder_name}.docker.localhost)."
+    read -p "Local Domain [${folder_name}.docker.localhost]: " domain_name
+    [ -z "$domain_name" ] && domain_name="${folder_name}.docker.localhost"
+
+    # Network Selection
+    networks=()
+    while IFS= read -r line; do
+        [ -n "$line" ] && networks+=("$line")
+    done < <(docker network ls --format "{{.Name}}" | grep -v "bridge\|host\|none")
+
+    # Check if proxy-public exists in the list
+    local found_proxy=0
+    for n in "${networks[@]}"; do
+        if [[ "$n" == "proxy-public" ]]; then
+            found_proxy=1
+            break
+        fi
+    done
+
+    if [ $found_proxy -eq 0 ]; then
+        networks+=("proxy-public (Create new)")
+    fi
+    networks+=("Manual Input")
+
+    interactive_menu "Select Docker Network for Traefik" "${networks[@]}"
+    local net_choice=$?
+    local selected="${networks[$net_choice]}"
+
+    if [[ "$selected" == "Manual Input" ]]; then
+         read -p "Enter Docker Network Name: " traefik_network
+    elif [[ "$selected" == "proxy-public (Create new)" ]]; then
+         traefik_network="proxy-public"
+    else
+         traefik_network="$selected"
+    fi
+
+    if [ -d "$folder_name" ]; then
+        ask_yes_no "Directory $folder_name already exists. Remove it and continue?"
+        if [ $? -eq 0 ]; then
+            echo -e "${YELLOW}Removing existing directory...${NC}"
+            docker run --rm -v "$(pwd):/work" -w /work node:lts-alpine rm -rf "$folder_name"
+        else
+            echo -e "${RED}Aborted.${NC}"
+            return
+        fi
+    fi
+
+    echo -e "${BLUE}>>> Running create-vite@latest via Docker...${NC}"
+    docker run --rm -it -v "$(pwd):/work" -w /work -e HOME=/tmp --user "$(id -u):$(id -g)" node:lts-alpine \
+        sh -lc "npm create vite@latest \"$folder_name\" -- --template react && cd \"$folder_name\" && npm install"
+
+    if [ ! -d "$folder_name" ]; then
+        echo -e "${RED}Project generation failed or was cancelled.${NC}"
+        return
+    fi
+
+    echo -e "${BLUE}>>> Ensuring correct permissions...${NC}"
+    if [ ! -w "$folder_name" ]; then
+        echo -e "${YELLOW}Directory is not writable (likely owned by root). Requesting sudo to fix ownership...${NC}"
+        sudo chown -R "$(id -u):$(id -g)" "$folder_name"
+        sudo chmod -R u+rwX,go+rX "$folder_name"
+    else
+        echo -e "${GREEN}Permissions look correct.${NC}"
+    fi
+
+    echo -e "${BLUE}>>> Applying Docker boilerplate configuration...${NC}"
+    cp "$TEMPLATES_DIR/vite-react/Dockerfile" "$folder_name/"
+    cp "$TEMPLATES_DIR/vite-react/nginx.conf" "$folder_name/"
+    cp "$TEMPLATES_DIR/vite-react/docker-compose.yml" "$folder_name/"
+    cp "$TEMPLATES_DIR/vite-react/docker-compose.dev.yml" "$folder_name/"
+    cp "$TEMPLATES_DIR/vite-react/.env.example" "$folder_name/"
+    cp "$TEMPLATES_DIR/vite-react/README.md" "$folder_name/README-DOCKER.md"
+    cp -r "$TEMPLATES_DIR/vite-react/.github" "$folder_name/" 2>/dev/null || true
+    cp "$TEMPLATES_DIR/vite-react/.gitlab-ci.yml" "$folder_name/" 2>/dev/null || true
+
+    # Ensure proxy-public network exists
+    if [ "$traefik_network" == "proxy-public" ]; then
+        if ! docker network inspect proxy-public >/dev/null 2>&1; then
+            echo -e "${BLUE}>>> Creating external network 'proxy-public'...${NC}"
+            docker network create proxy-public
+        fi
+    else
+        if ! docker network inspect "$traefik_network" >/dev/null 2>&1; then
+             echo -e "${YELLOW}Warning: Network '$traefik_network' does not exist. You may need to create it manually.${NC}"
+        fi
+    fi
+
+    cd "$folder_name" || exit
+
+    project_name_sanitized=$(echo "$folder_name" | tr -cd '[:alnum:]-')
+    cat > .env <<EOF
+PROJECT_NAME=$project_name_sanitized
+DOMAIN_NAME=$domain_name
+TRAEFIK_NETWORK=$traefik_network
+EOF
+
+    git init -q
+
+    echo -e "${GREEN}Success!${NC}"
+    echo -e "Created standalone project in: ${BLUE}$(pwd)${NC}"
+    echo -e "Next steps:"
+    echo -e "  1. cd $folder_name"
+    echo -e "  2. git add ."
+    echo -e "  3. git commit -m 'Initial commit'"
+    echo -e "  4. docker compose up -d --build"
+}
+
 # Function to setup Bot
 setup_bot() {
     echo -e "\n${BLUE}>>> Generating New Bot Project...${NC}"
@@ -545,14 +658,15 @@ EOF
 
 # Main Menu
 while true; do
-    options=("Global Proxy (Traefik)" "Web Project (Next.js)" "Telegram Bot" "Quit")
+    options=("Global Proxy (Traefik)" "Web Project (Next.js)" "React + Vite Project" "Telegram Bot" "Quit")
     interactive_menu "Main Menu" "${options[@]}"
     choice=$?
     
     case $choice in
         0) setup_traefik; break ;;
         1) setup_web; break ;;
-        2) setup_bot; break ;;
-        3) echo "Exiting..."; exit 0 ;;
+        2) setup_vite_react; break ;;
+        3) setup_bot; break ;;
+        4) echo "Exiting..."; exit 0 ;;
     esac
 done

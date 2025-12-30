@@ -1,0 +1,31 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+
+  deploy:
+    needs: build
+    if: vars.SERVER_HOST != '' && vars.SERVER_USER != '' && vars.PROJECT_PATH != '' && vars.PROJECT_NAME != '' && vars.DOMAIN_NAME != '' && vars.TRAEFIK_NETWORK != ''
+    uses: ./.github/workflows/deploy.yml
+    with:
+      SERVER_HOST: ${{ vars.SERVER_HOST }}
+      SERVER_USER: ${{ vars.SERVER_USER }}
+      PROJECT_PATH: ${{ vars.PROJECT_PATH }}
+      PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+      DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+      TRAEFIK_NETWORK: ${{ vars.TRAEFIK_NETWORK }}
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}

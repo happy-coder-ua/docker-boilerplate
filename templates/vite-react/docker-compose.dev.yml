@@ -1,0 +1,20 @@
+services:
+  web:
+    build:
+      context: .
+      target: dev
+    container_name: ${PROJECT_NAME?PROJECT_NAME must be set}-dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
+    networks:
+      - proxy-public
+
+networks:
+  proxy-public:
+    external: true
+    name: ${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}
