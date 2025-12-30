@@ -400,6 +400,7 @@ setup_web() {
     cp "$TEMPLATES_DIR/nextjs/docker-compose.yml" "$folder_name/"
     cp "$TEMPLATES_DIR/nextjs/.env.example" "$folder_name/"
     cp "$TEMPLATES_DIR/nextjs/README.md" "$folder_name/README-DOCKER.md"
+    cp "$TEMPLATES_DIR/nextjs/Makefile" "$folder_name/" 2>/dev/null || true
     cp -r "$TEMPLATES_DIR/nextjs/.github" "$folder_name/" 2>/dev/null || true
     cp "$TEMPLATES_DIR/nextjs/.gitlab-ci.yml" "$folder_name/" 2>/dev/null || true
     
@@ -523,6 +524,7 @@ setup_vite_react() {
     cp "$TEMPLATES_DIR/vite-react/docker-compose.dev.yml" "$folder_name/"
     cp "$TEMPLATES_DIR/vite-react/.env.example" "$folder_name/"
     cp "$TEMPLATES_DIR/vite-react/README.md" "$folder_name/README-DOCKER.md"
+    cp "$TEMPLATES_DIR/vite-react/Makefile" "$folder_name/" 2>/dev/null || true
     cp -r "$TEMPLATES_DIR/vite-react/.github" "$folder_name/" 2>/dev/null || true
     cp "$TEMPLATES_DIR/vite-react/.gitlab-ci.yml" "$folder_name/" 2>/dev/null || true
 
