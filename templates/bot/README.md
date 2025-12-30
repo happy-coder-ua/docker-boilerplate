@@ -2,18 +2,31 @@
 
 This is a standalone Telegram Bot project (Node.js/Telegraf) ready to be deployed with Docker.
 
-## Setup
+## Intended Workflow (Local Generation)
 
-1.  **Clone**: Clone this repo to your server.
-2.  **Env**: Copy `.env.example` to `.env` and add your `BOT_TOKEN`.
+- Generate and develop locally.
+- Push to Git.
+- Deploy to VPS via CI/CD (GitHub Actions / GitLab CI).
+
+This project is not meant to be generated on a VPS.
+
+## Local Setup
+
+1.  **Env**: Copy `.env.example` to `.env` and add your `BOT_TOKEN`.
     ```bash
     cp .env.example .env
     # Edit .env
     ```
-3.  **Run**:
+2.  **Run**:
     ```bash
     docker compose up -d --build
     ```
+
+## Production Deploy (CI/CD)
+
+- Do **not** commit `.env`.
+- Configure GitHub Actions/GitLab CI variables and secrets.
+- Push to `main` to deploy.
 
 
 ## Network
