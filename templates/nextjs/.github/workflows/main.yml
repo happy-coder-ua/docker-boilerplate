@@ -22,6 +22,7 @@ jobs:
     if: vars.SERVER_HOST != '' && vars.SERVER_USER != '' && vars.PROJECT_PATH != '' && vars.PROJECT_NAME != '' && vars.DOMAIN_NAME != '' && vars.TRAEFIK_NETWORK != ''
     uses: ./.github/workflows/deploy.yml
     with:
+      GIT_BRANCH: ${{ github.ref_name }}
       SERVER_HOST: ${{ vars.SERVER_HOST }}
       SERVER_USER: ${{ vars.SERVER_USER }}
       PROJECT_PATH: ${{ vars.PROJECT_PATH }}

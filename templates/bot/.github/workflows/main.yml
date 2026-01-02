@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    if: vars.SERVER_HOST != '' && vars.SERVER_USER != '' && vars.PROJECT_PATH != '' && vars.PROJECT_NAME != '' && vars.TRAEFIK_NETWORK != ''
+    if: vars.SERVER_HOST != '' && vars.SERVER_USER != '' && vars.PROJECT_PATH != '' && vars.PROJECT_NAME != '' && vars.DOMAIN_NAME != '' && vars.TRAEFIK_NETWORK != ''
     uses: ./.github/workflows/deploy.yml
     with:
       GIT_BRANCH: ${{ github.ref_name }}
@@ -16,6 +16,7 @@ jobs:
       PROJECT_NAME: ${{ vars.PROJECT_NAME }}
       DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
       TRAEFIK_NETWORK: ${{ vars.TRAEFIK_NETWORK }}
+      TRAEFIK_ENABLE: ${{ vars.TRAEFIK_ENABLE }}
       ADMIN_IDS: ${{ vars.ADMIN_IDS }}
     secrets:
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}

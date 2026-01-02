@@ -3,11 +3,14 @@ services:
     build: .
     container_name: ${PROJECT_NAME?PROJECT_NAME must be set}
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
       - NODE_ENV=production
     labels:
       - "traefik.enable=${TRAEFIK_ENABLE:-false}"
+      - "traefik.docker.network=${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}"
       - "traefik.http.routers.${PROJECT_NAME}.rule=Host(`${DOMAIN_NAME:-}`)"
       - "traefik.http.routers.${PROJECT_NAME}.entrypoints=https"
       - "traefik.http.routers.${PROJECT_NAME}.tls=true"

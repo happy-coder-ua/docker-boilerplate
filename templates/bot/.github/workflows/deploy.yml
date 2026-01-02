@@ -24,6 +24,9 @@ on:
       TRAEFIK_NETWORK:
         required: true
         type: string
+      TRAEFIK_ENABLE:
+        required: false
+        type: string
       ADMIN_IDS:
         required: false
         type: string
@@ -45,6 +48,7 @@ jobs:
       PROJECT_NAME: ${{ inputs.PROJECT_NAME }}
       DOMAIN_NAME: ${{ inputs.DOMAIN_NAME }}
       TRAEFIK_NETWORK: ${{ inputs.TRAEFIK_NETWORK }}
+      TRAEFIK_ENABLE: ${{ inputs.TRAEFIK_ENABLE }}
       BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
       ADMIN_IDS: ${{ inputs.ADMIN_IDS }}
     steps:
@@ -68,8 +72,29 @@ jobs:
           host: ${{ env.SERVER_HOST }}
           username: ${{ env.SERVER_USER }}
           key: ${{ env.SSH_PRIVATE_KEY }}
+          envs: GIT_BRANCH,PROJECT_PATH,PROJECT_NAME,DOMAIN_NAME,TRAEFIK_NETWORK,TRAEFIK_ENABLE,BOT_TOKEN,ADMIN_IDS
           script: |
             set -euo pipefail
+
+            if ! command -v git >/dev/null 2>&1; then
+              echo "git is not installed on the server" >&2
+              exit 1
+            fi
+
+            if ! command -v docker >/dev/null 2>&1; then
+              echo "docker is not installed on the server" >&2
+              exit 1
+            fi
+
+            COMPOSE_BIN="docker compose"
+            if ! docker compose version >/dev/null 2>&1; then
+              if command -v docker-compose >/dev/null 2>&1; then
+                COMPOSE_BIN="docker-compose"
+              else
+                echo "Docker Compose is not available (neither 'docker compose' nor 'docker-compose')" >&2
+                exit 1
+              fi
+            fi
 
             if [ -z "${PROJECT_PATH:-}" ]; then
               echo "PROJECT_PATH is empty" >&2
@@ -101,19 +126,42 @@ jobs:
             if [ -z "$branch" ]; then branch="main"; fi
             git pull origin "$branch"
 
+            if [ -z "${TRAEFIK_NETWORK:-}" ]; then
+              echo "TRAEFIK_NETWORK is empty" >&2
+              exit 1
+            fi
+
+            if ! docker network inspect "$TRAEFIK_NETWORK" >/dev/null 2>&1; then
+              echo "Traefik network '$TRAEFIK_NETWORK' does not exist on the server" >&2
+              echo "Create it first, e.g.: docker network create $TRAEFIK_NETWORK" >&2
+              exit 1
+            fi
+
             # Create/Update .env from CI variables.
-            # Preserve existing BOT_TOKEN / ADMIN_IDS env unless the CI provides new values.
+            # Preserve any extra user-defined variables in .env.
             existing_bot_token=""
             existing_admin_ids=""
+            existing_traefik_enable=""
+            tmp="$(mktemp)"
             if [ -f .env ]; then
               existing_bot_token="$(grep -E '^BOT_TOKEN=' .env | tail -n 1 || true)"
               existing_admin_ids="$(grep -E '^ADMIN_IDS=' .env | tail -n 1 || true)"
+              existing_traefik_enable="$(grep -E '^TRAEFIK_ENABLE=' .env | tail -n 1 || true)"
+              grep -vE '^(PROJECT_NAME|DOMAIN_NAME|TRAEFIK_NETWORK|TRAEFIK_ENABLE|BOT_TOKEN|ADMIN_IDS)=' .env > "$tmp" || true
             fi
 
             : > .env
             printf '%s\n' "PROJECT_NAME=$PROJECT_NAME" >> .env
             printf '%s\n' "DOMAIN_NAME=$DOMAIN_NAME" >> .env
             printf '%s\n' "TRAEFIK_NETWORK=$TRAEFIK_NETWORK" >> .env
+
+            if [ -n "${TRAEFIK_ENABLE:-}" ]; then
+              printf '%s\n' "TRAEFIK_ENABLE=$TRAEFIK_ENABLE" >> .env
+            elif [ -n "$existing_traefik_enable" ]; then
+              printf '%s\n' "$existing_traefik_enable" >> .env
+            else
+              printf '%s\n' "TRAEFIK_ENABLE=false" >> .env
+            fi
 
             if [ -n "${BOT_TOKEN:-}" ]; then
               printf '%s\n' "BOT_TOKEN=$BOT_TOKEN" >> .env
@@ -127,5 +175,10 @@ jobs:
               printf '%s\n' "$existing_admin_ids" >> .env
             fi
 
-            docker compose up -d --build
+            if [ -s "$tmp" ]; then
+              cat "$tmp" >> .env
+            fi
+            rm -f "$tmp"
+
+            $COMPOSE_BIN up -d --build
             docker image prune -f

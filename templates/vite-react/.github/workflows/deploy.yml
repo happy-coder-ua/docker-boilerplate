@@ -3,6 +3,9 @@ name: Deploy (reusable)
 on:
   workflow_call:
     inputs:
+      GIT_BRANCH:
+        required: false
+        type: string
       SERVER_HOST:
         required: true
         type: string
@@ -29,6 +32,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
+      GIT_BRANCH: ${{ inputs.GIT_BRANCH }}
       SERVER_HOST: ${{ inputs.SERVER_HOST }}
       SERVER_USER: ${{ inputs.SERVER_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -57,13 +61,85 @@ jobs:
           host: ${{ env.SERVER_HOST }}
           username: ${{ env.SERVER_USER }}
           key: ${{ env.SSH_PRIVATE_KEY }}
+          envs: GIT_BRANCH,PROJECT_PATH,PROJECT_NAME,DOMAIN_NAME,TRAEFIK_NETWORK
           script: |
-            cd "$PROJECT_PATH"
-            git pull origin ${{ github.ref_name }}
-            # Create/Update .env from variables
-            echo "PROJECT_NAME=$PROJECT_NAME" > .env
-            echo "DOMAIN_NAME=$DOMAIN_NAME" >> .env
-            echo "TRAEFIK_NETWORK=$TRAEFIK_NETWORK" >> .env
+            set -euo pipefail
 
-            docker compose up -d --build
+            if ! command -v git >/dev/null 2>&1; then
+              echo "git is not installed on the server" >&2
+              exit 1
+            fi
+
+            if ! command -v docker >/dev/null 2>&1; then
+              echo "docker is not installed on the server" >&2
+              exit 1
+            fi
+
+            COMPOSE_BIN="docker compose"
+            if ! docker compose version >/dev/null 2>&1; then
+              if command -v docker-compose >/dev/null 2>&1; then
+                COMPOSE_BIN="docker-compose"
+              else
+                echo "Docker Compose is not available (neither 'docker compose' nor 'docker-compose')" >&2
+                exit 1
+              fi
+            fi
+
+            if [ -z "${PROJECT_PATH:-}" ]; then
+              echo "PROJECT_PATH is empty" >&2
+              exit 1
+            fi
+
+            if [ ! -d "$PROJECT_PATH" ]; then
+              echo "PROJECT_PATH does not exist: $PROJECT_PATH" >&2
+              echo "Create it and clone the repo there, e.g.:" >&2
+              echo "  git clone <repo_url> $PROJECT_PATH" >&2
+              exit 1
+            fi
+
+            cd "$PROJECT_PATH"
+
+            if [ ! -d .git ]; then
+              echo "Not a git repository: $PROJECT_PATH (missing .git)" >&2
+              exit 1
+            fi
+
+            if [ ! -f docker-compose.yml ]; then
+              echo "docker-compose.yml not found in $PROJECT_PATH" >&2
+              echo "Fix: ensure the repository was cloned correctly and PROJECT_PATH points to its root." >&2
+              exit 1
+            fi
+
+            branch="${GIT_BRANCH:-}"
+            if [ -z "$branch" ]; then branch="main"; fi
+            git pull origin "$branch"
+
+            if [ -z "${TRAEFIK_NETWORK:-}" ]; then
+              echo "TRAEFIK_NETWORK is empty" >&2
+              exit 1
+            fi
+
+            if ! docker network inspect "$TRAEFIK_NETWORK" >/dev/null 2>&1; then
+              echo "Traefik network '$TRAEFIK_NETWORK' does not exist on the server" >&2
+              echo "Create it first, e.g.: docker network create $TRAEFIK_NETWORK" >&2
+              exit 1
+            fi
+
+            # Create/Update .env from CI variables.
+            # Preserve any extra user-defined variables in .env.
+            tmp="$(mktemp)"
+            if [ -f .env ]; then
+              grep -vE '^(PROJECT_NAME|DOMAIN_NAME|TRAEFIK_NETWORK)=' .env > "$tmp" || true
+            fi
+
+            : > .env
+            printf '%s\n' "PROJECT_NAME=$PROJECT_NAME" >> .env
+            printf '%s\n' "DOMAIN_NAME=$DOMAIN_NAME" >> .env
+            printf '%s\n' "TRAEFIK_NETWORK=$TRAEFIK_NETWORK" >> .env
+            if [ -s "$tmp" ]; then
+              cat "$tmp" >> .env
+            fi
+            rm -f "$tmp"
+
+            $COMPOSE_BIN up -d --build
             docker image prune -f
