@@ -37,8 +37,8 @@ deploy:
       REPO_URL_B64="$(printf '%s' "$REPO_URL" | base64 | tr -d '\n')"
       PROJECT_PATH_B64="$(printf '%s' "$PROJECT_PATH" | base64 | tr -d '\n')"
       BRANCH_B64="$(printf '%s' "$branch" | base64 | tr -d '\n')"
-      PORTAINER_BASIC_AUTH_USER_B64="$(printf '%s' "${PORTAINER_BASIC_AUTH_USER:-}" | base64 | tr -d '\n')"
-      PORTAINER_BASIC_AUTH_PASSWORD_B64="$(printf '%s' "${PORTAINER_BASIC_AUTH_PASSWORD:-}" | base64 | tr -d '\n')"
+      PORTAINER_BASIC_AUTH_USER_B64="$(printf '%s' "${PORTAINER_BASIC_AUTH_USER:-}" | base64 | tr -d '\n' | sed 'y:+/:-_:' | tr -d '=')"
+      PORTAINER_BASIC_AUTH_PASSWORD_B64="$(printf '%s' "${PORTAINER_BASIC_AUTH_PASSWORD:-}" | base64 | tr -d '\n' | sed 'y:+/:-_:' | tr -d '=')"
 
       REPO_SSH_KEY_B64=""
       if [ -n "${REPO_SSH_KEY:-}" ]; then
@@ -64,9 +64,34 @@ deploy:
           printf '%s' ""
           return 0
         fi
-        if decoded="$(printf '%s' "$input" | tr -d '\n\r' | base64 -d 2>/dev/null)"; then
-          printf '%s' "$decoded"
-          return 0
+        cleaned="$(printf '%s' "$input" | tr -d '\n\r' | sed 'y:-_:+/:' )"
+        case $((${#cleaned} % 4)) in
+          0) : ;;
+          2) cleaned="${cleaned}==" ;;
+          3) cleaned="${cleaned}=" ;;
+          1) cleaned="" ;;
+        esac
+        if [ -n "$cleaned" ]; then
+          if command -v docker >/dev/null 2>&1; then
+            if ! docker image inspect httpd:alpine >/dev/null 2>&1; then
+              docker pull -q httpd:alpine >/dev/null 2>&1 || true
+            fi
+            if docker image inspect httpd:alpine >/dev/null 2>&1; then
+              decoded="$(printf '%s' "$cleaned" | docker run --rm -i httpd:alpine sh -c 'base64 -d 2>/dev/null' 2>/dev/null || true)"
+              if [ -n "$decoded" ]; then
+                printf '%s' "$decoded"
+                return 0
+              fi
+            fi
+          fi
+          if decoded="$(printf '%s' "$cleaned" | base64 --decode 2>/dev/null)"; then
+            printf '%s' "$decoded"
+            return 0
+          fi
+          if decoded="$(printf '%s' "$cleaned" | base64 -d 2>/dev/null)"; then
+            printf '%s' "$decoded"
+            return 0
+          fi
         fi
         printf '%s' "$input"
       }
@@ -74,10 +99,10 @@ deploy:
       PORTAINER_BASIC_AUTH_USER=""
       PORTAINER_BASIC_AUTH_PASSWORD=""
       if [ -n "${PORTAINER_BASIC_AUTH_USER_B64:-}" ]; then
-        PORTAINER_BASIC_AUTH_USER="$(decode_b64_or_raw "$PORTAINER_BASIC_AUTH_USER_B64" | tr -d '\r' | head -n 1)"
+        PORTAINER_BASIC_AUTH_USER="$(decode_b64_or_raw "$PORTAINER_BASIC_AUTH_USER_B64" | tr -d '\r' | sed -n '/./{p;q;}')"
       fi
       if [ -n "${PORTAINER_BASIC_AUTH_PASSWORD_B64:-}" ]; then
-        PORTAINER_BASIC_AUTH_PASSWORD="$(decode_b64_or_raw "$PORTAINER_BASIC_AUTH_PASSWORD_B64" | tr -d '\r' | head -n 1)"
+        PORTAINER_BASIC_AUTH_PASSWORD="$(decode_b64_or_raw "$PORTAINER_BASIC_AUTH_PASSWORD_B64" | tr -d '\r' | sed -n '/./{p;q;}')"
       fi
 
       if [ -n "$PORTAINER_BASIC_AUTH_USER" ] && [ -n "$PORTAINER_BASIC_AUTH_PASSWORD" ]; then

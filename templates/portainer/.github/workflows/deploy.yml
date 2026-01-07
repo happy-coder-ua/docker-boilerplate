@@ -74,11 +74,14 @@ jobs:
           fi
 
       - name: Prepare SSH-safe env
+        id: prepare_ssh_env
         run: |
           set -euo pipefail
-          # Passwords / bcrypt lines can contain characters that break SSH env passing; base64 them.
-          printf '%s' "${PORTAINER_BASIC_AUTH_USER:-}" | base64 | tr -d '\n' | sed 's/^/PORTAINER_BASIC_AUTH_USER_B64=/' >> "$GITHUB_ENV"
-          printf '%s' "${PORTAINER_BASIC_AUTH_PASSWORD:-}" | base64 | tr -d '\n' | sed 's/^/PORTAINER_BASIC_AUTH_PASSWORD_B64=/' >> "$GITHUB_ENV"
+          # Passwords can contain characters that break SSH env passing; encode as URL-safe base64 (no '+', '/', '=').
+          user_b64="$(printf '%s' "${PORTAINER_BASIC_AUTH_USER:-}" | base64 | tr -d '\n' | sed 'y:+/:-_:' | tr -d '=')"
+          pass_b64="$(printf '%s' "${PORTAINER_BASIC_AUTH_PASSWORD:-}" | base64 | tr -d '\n' | sed 'y:+/:-_:' | tr -d '=')"
+          printf '%s\n' "user_b64=$user_b64" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "pass_b64=$pass_b64" >> "$GITHUB_OUTPUT"
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -86,9 +89,13 @@ jobs:
           host: ${{ env.SERVER_HOST }}
           username: ${{ env.SERVER_USER }}
           key: ${{ env.SSH_PRIVATE_KEY }}
-          envs: GIT_BRANCH,REPO_URL,REPO_SSH_KEY,PROJECT_PATH,PROJECT_NAME,DOMAIN_NAME,TRAEFIK_NETWORK,TRAEFIK_ENTRYPOINT,PORTAINER_BASIC_AUTH_USER_B64,PORTAINER_BASIC_AUTH_PASSWORD_B64
+          envs: GIT_BRANCH,REPO_URL,REPO_SSH_KEY,PROJECT_PATH,PROJECT_NAME,DOMAIN_NAME,TRAEFIK_NETWORK,TRAEFIK_ENTRYPOINT
           script: |
             set -euo pipefail
+
+            # Pass BasicAuth credentials via inline script variables (avoids env transport corruption).
+            PORTAINER_BASIC_AUTH_USER_B64='${{ steps.prepare_ssh_env.outputs.user_b64 }}'
+            PORTAINER_BASIC_AUTH_PASSWORD_B64='${{ steps.prepare_ssh_env.outputs.pass_b64 }}'
 
             if ! command -v git >/dev/null 2>&1; then
               echo "git is not installed on the server" >&2
@@ -206,14 +213,51 @@ jobs:
 
             # Optional: generate Traefik Basic Auth override from user+password.
             decode_b64_or_raw() {
-              local input="${1:-}"
+              input="${1:-}"
               if [ -z "$input" ]; then
                 printf '%s' ""
                 return 0
               fi
-              if decoded="$(printf '%s' "$input" | tr -d '\n\r' | base64 -d 2>/dev/null)"; then
-                printf '%s' "$decoded"
-                return 0
+              # Accept both standard base64 and URL-safe base64 (no padding).
+              cleaned="$(printf '%s' "$input" | tr -d '\n\r' | sed 'y:-_:+/:' )"
+              case $((${#cleaned} % 4)) in
+                0) : ;;
+                2) cleaned="${cleaned}==" ;;
+                3) cleaned="${cleaned}=" ;;
+                1) cleaned="" ;; # invalid length
+              esac
+
+              if [ -n "$cleaned" ]; then
+                # Prefer decoding inside a container (doesn't rely on host base64/python).
+                if command -v docker >/dev/null 2>&1; then
+                  if ! docker image inspect httpd:alpine >/dev/null 2>&1; then
+                    docker pull -q httpd:alpine >/dev/null 2>&1 || true
+                  fi
+                  if docker image inspect httpd:alpine >/dev/null 2>&1; then
+                    decoded="$(printf '%s' "$cleaned" | docker run --rm -i httpd:alpine sh -c 'base64 -d 2>/dev/null' 2>/dev/null || true)"
+                    if [ -n "$decoded" ]; then
+                      printf '%s' "$decoded"
+                      return 0
+                    fi
+                  fi
+                fi
+                # Try GNU coreutils base64.
+                if decoded="$(printf '%s' "$cleaned" | base64 --decode 2>/dev/null)"; then
+                  printf '%s' "$decoded"
+                  return 0
+                fi
+                # Try BusyBox / BSD style.
+                if decoded="$(printf '%s' "$cleaned" | base64 -d 2>/dev/null)"; then
+                  printf '%s' "$decoded"
+                  return 0
+                fi
+                # Fallback: python3 (if available).
+                if command -v python3 >/dev/null 2>&1; then
+                  if decoded="$(B64="$cleaned" python3 -c 'import os,base64; s=os.environ.get("B64",""); print(base64.b64decode(s).decode("utf-8"), end="")')"; then
+                    printf '%s' "$decoded"
+                    return 0
+                  fi
+                fi
               fi
               # Fallback: treat the value as already-decoded raw text.
               printf '%s' "$input"
@@ -222,10 +266,10 @@ jobs:
             PORTAINER_BASIC_AUTH_USER=""
             PORTAINER_BASIC_AUTH_PASSWORD=""
             if [ -n "${PORTAINER_BASIC_AUTH_USER_B64:-}" ]; then
-              PORTAINER_BASIC_AUTH_USER="$(decode_b64_or_raw "$PORTAINER_BASIC_AUTH_USER_B64" | tr -d '\r' | head -n 1)"
+              PORTAINER_BASIC_AUTH_USER="$(decode_b64_or_raw "$PORTAINER_BASIC_AUTH_USER_B64" | tr -d '\r' | sed -n '/./{p;q;}')"
             fi
             if [ -n "${PORTAINER_BASIC_AUTH_PASSWORD_B64:-}" ]; then
-              PORTAINER_BASIC_AUTH_PASSWORD="$(decode_b64_or_raw "$PORTAINER_BASIC_AUTH_PASSWORD_B64" | tr -d '\r' | head -n 1)"
+              PORTAINER_BASIC_AUTH_PASSWORD="$(decode_b64_or_raw "$PORTAINER_BASIC_AUTH_PASSWORD_B64" | tr -d '\r' | sed -n '/./{p;q;}')"
             fi
 
             if [ -n "$PORTAINER_BASIC_AUTH_USER" ] && [ -n "$PORTAINER_BASIC_AUTH_PASSWORD" ]; then
@@ -244,11 +288,19 @@ jobs:
                 echo "      - \"traefik.http.routers.${PROJECT_NAME}.middlewares=${PROJECT_NAME}-auth\""
                 echo "      - \"traefik.http.middlewares.${PROJECT_NAME}-auth.basicauth.users=${BASIC_AUTH_HTPASSWD_LINE_COMPOSE}\""
               } > docker-compose.override.yml
+
+              if [ -s docker-compose.override.yml ]; then
+                echo "Traefik BasicAuth: enabled (docker-compose.override.yml written)"
+              else
+                echo "Traefik BasicAuth: ERROR (override file not written)" >&2
+                exit 1
+              fi
             else
               # If creds are not set, ensure CI-managed auth is disabled.
               if [ -f docker-compose.override.yml ] && head -n 1 docker-compose.override.yml | grep -q '^# Generated by CI (Traefik Basic Auth)$'; then
                 rm -f docker-compose.override.yml
               fi
+              echo "Traefik BasicAuth: disabled (missing user or password)"
             fi
 
             tmp="$(mktemp)"
