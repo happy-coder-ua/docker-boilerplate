@@ -6,6 +6,9 @@ on:
       GIT_BRANCH:
         required: false
         type: string
+      REPO_URL:
+        required: false
+        type: string
       SERVER_HOST:
         required: true
         type: string
@@ -24,32 +27,40 @@ on:
       TRAEFIK_NETWORK:
         required: true
         type: string
+      TRAEFIK_ENTRYPOINT:
+        required: false
+        type: string
       PORTAINER_BASIC_AUTH_USERS:
         required: false
         type: string
     secrets:
       SSH_PRIVATE_KEY:
         required: true
+      REPO_SSH_KEY:
+        required: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
       GIT_BRANCH: ${{ inputs.GIT_BRANCH }}
+      REPO_URL: ${{ inputs.REPO_URL }}
       SERVER_HOST: ${{ inputs.SERVER_HOST }}
       SERVER_USER: ${{ inputs.SERVER_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      REPO_SSH_KEY: ${{ secrets.REPO_SSH_KEY }}
       PROJECT_PATH: ${{ inputs.PROJECT_PATH }}
       PROJECT_NAME: ${{ inputs.PROJECT_NAME }}
       DOMAIN_NAME: ${{ inputs.DOMAIN_NAME }}
       TRAEFIK_NETWORK: ${{ inputs.TRAEFIK_NETWORK }}
+      TRAEFIK_ENTRYPOINT: ${{ inputs.TRAEFIK_ENTRYPOINT }}
       PORTAINER_BASIC_AUTH_USERS: ${{ inputs.PORTAINER_BASIC_AUTH_USERS }}
     steps:
       - name: Validate required secrets
         run: |
           set -euo pipefail
           missing=0
-          for key in SERVER_HOST SERVER_USER SSH_PRIVATE_KEY PROJECT_PATH PROJECT_NAME DOMAIN_NAME TRAEFIK_NETWORK; do
+          for key in SERVER_HOST SERVER_USER SSH_PRIVATE_KEY PROJECT_PATH PROJECT_NAME DOMAIN_NAME TRAEFIK_NETWORK REPO_URL; do
             if [ -z "${!key}" ]; then
               echo "Missing required secret: $key" >&2
               missing=1
@@ -65,7 +76,7 @@ jobs:
           host: ${{ env.SERVER_HOST }}
           username: ${{ env.SERVER_USER }}
           key: ${{ env.SSH_PRIVATE_KEY }}
-          envs: GIT_BRANCH,PROJECT_PATH,PROJECT_NAME,DOMAIN_NAME,TRAEFIK_NETWORK,PORTAINER_BASIC_AUTH_USERS
+          envs: GIT_BRANCH,REPO_URL,REPO_SSH_KEY,PROJECT_PATH,PROJECT_NAME,DOMAIN_NAME,TRAEFIK_NETWORK,TRAEFIK_ENTRYPOINT,PORTAINER_BASIC_AUTH_USERS
           script: |
             set -euo pipefail
 
@@ -94,11 +105,63 @@ jobs:
               exit 1
             fi
 
-            if [ ! -d "$PROJECT_PATH" ]; then
-              echo "PROJECT_PATH does not exist: $PROJECT_PATH" >&2
-              echo "Create it and clone the repo there, e.g.:" >&2
-              echo "  git clone <repo_url> $PROJECT_PATH" >&2
+            if [ -z "${REPO_URL:-}" ]; then
+              echo "REPO_URL is empty" >&2
               exit 1
+            fi
+
+            branch="${GIT_BRANCH:-}"
+            if [ -z "$branch" ]; then branch="main"; fi
+
+            clone_url="$REPO_URL"
+            if [ -n "${REPO_SSH_KEY:-}" ]; then
+              mkdir -p "$HOME/.ssh"
+              chmod 700 "$HOME/.ssh"
+              git_ssh_key_path="$HOME/.ssh/repo_deploy_key"
+              printf '%s\n' "$REPO_SSH_KEY" > "$git_ssh_key_path"
+              chmod 600 "$git_ssh_key_path"
+              touch "$HOME/.ssh/known_hosts"
+              chmod 600 "$HOME/.ssh/known_hosts"
+              if ! ssh-keygen -F github.com >/dev/null 2>&1; then
+                ssh-keyscan -H github.com >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
+              fi
+              export GIT_SSH_COMMAND="ssh -i $git_ssh_key_path -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
+              ssh_url=""
+              case "$REPO_URL" in
+                git@github.com:*)
+                  ssh_url="$REPO_URL"
+                  ;;
+                https://github.com/*)
+                  repo_path="${REPO_URL#https://github.com/}"
+                  repo_path="${repo_path%.git}"
+                  ssh_url="git@github.com:${repo_path}.git"
+                  ;;
+              esac
+              if [ -z "$ssh_url" ]; then
+                echo "When REPO_SSH_KEY is set, REPO_URL must be a GitHub URL (https://github.com/<owner>/<repo>.git) or a git@github.com:<owner>/<repo>.git URL" >&2
+                exit 1
+              fi
+              clone_url="$ssh_url"
+            fi
+
+            if [ ! -d "$PROJECT_PATH" ]; then
+              parent_dir="$(dirname "$PROJECT_PATH")"
+              mkdir -p "$parent_dir"
+              git clone --branch "$branch" "$clone_url" "$PROJECT_PATH"
+            fi
+
+            if [ -d "$PROJECT_PATH" ] && [ ! -d "$PROJECT_PATH/.git" ]; then
+              if [ -z "$(ls -A "$PROJECT_PATH" 2>/dev/null || true)" ]; then
+                rmdir "$PROJECT_PATH" 2>/dev/null || true
+                parent_dir="$(dirname "$PROJECT_PATH")"
+                mkdir -p "$parent_dir"
+                git clone --branch "$branch" "$clone_url" "$PROJECT_PATH"
+              else
+                echo "Not a git repository: $PROJECT_PATH (missing .git)" >&2
+                echo "Fix: set PROJECT_PATH to the repo root, or delete this directory and re-run deploy." >&2
+                exit 1
+              fi
             fi
 
             cd "$PROJECT_PATH"
@@ -114,9 +177,11 @@ jobs:
               exit 1
             fi
 
-            branch="${GIT_BRANCH:-}"
-            if [ -z "$branch" ]; then branch="main"; fi
-            git pull origin "$branch"
+            git remote set-url origin "$clone_url" || true
+            if ! git pull origin "$branch"; then
+              echo "git pull failed. If this is a private repository, set REPO_SSH_KEY (GitHub Deploy Key private key) in CI secrets." >&2
+              exit 1
+            fi
 
             if [ -z "${TRAEFIK_NETWORK:-}" ]; then
               echo "TRAEFIK_NETWORK is empty" >&2
@@ -133,13 +198,17 @@ jobs:
             # Preserve any extra user-defined variables in .env.
             tmp="$(mktemp)"
             if [ -f .env ]; then
-              grep -vE '^(PROJECT_NAME|DOMAIN_NAME|TRAEFIK_NETWORK|PORTAINER_BASIC_AUTH_USERS)=' .env > "$tmp" || true
+              grep -vE '^(PROJECT_NAME|DOMAIN_NAME|TRAEFIK_NETWORK|TRAEFIK_ENTRYPOINT|PORTAINER_BASIC_AUTH_USERS)=' .env > "$tmp" || true
             fi
 
             : > .env
             printf '%s\n' "PROJECT_NAME=$PROJECT_NAME" >> .env
             printf '%s\n' "DOMAIN_NAME=$DOMAIN_NAME" >> .env
             printf '%s\n' "TRAEFIK_NETWORK=$TRAEFIK_NETWORK" >> .env
+
+            if [ -n "${TRAEFIK_ENTRYPOINT:-}" ]; then
+              printf '%s\n' "TRAEFIK_ENTRYPOINT=$TRAEFIK_ENTRYPOINT" >> .env
+            fi
 
             if [ -n "${PORTAINER_BASIC_AUTH_USERS:-}" ]; then
               printf '%s\n' "PORTAINER_BASIC_AUTH_USERS=$PORTAINER_BASIC_AUTH_USERS" >> .env

@@ -12,7 +12,7 @@ services:
       - "traefik.enable=${TRAEFIK_ENABLE:-false}"
       - "traefik.docker.network=${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}"
       - "traefik.http.routers.${PROJECT_NAME}.rule=Host(`${DOMAIN_NAME:-}`)"
-      - "traefik.http.routers.${PROJECT_NAME}.entrypoints=https"
+      - "traefik.http.routers.${PROJECT_NAME}.entrypoints=${TRAEFIK_ENTRYPOINT:-https}"
       - "traefik.http.routers.${PROJECT_NAME}.tls=true"
       - "traefik.http.services.${PROJECT_NAME}.loadbalancer.server.port=3000"
     networks:

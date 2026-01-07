@@ -27,10 +27,8 @@ This project is not meant to be generated on a VPS.
 If you prefer short commands, use the included `Makefile`:
 
 ```bash
-make dev up
-make dev down
-make prod up
-make prod down
+make up
+make down
 make logs
 ```
 
@@ -39,6 +37,45 @@ make logs
 - Do **not** commit `.env`.
 - Configure GitHub Actions/GitLab CI variables and secrets.
 - Push to `main` to deploy.
+
+### GitHub Actions variables/secrets
+
+Variables (Repository → Settings → Variables):
+
+- `SERVER_HOST`
+- `SERVER_USER`
+- `PROJECT_PATH`
+- `PROJECT_NAME`
+- `DOMAIN_NAME`
+- `TRAEFIK_NETWORK`
+- `TRAEFIK_ENTRYPOINT` (optional; e.g. `websecure` if your Traefik doesn't have `https`)
+- `TRAEFIK_ENABLE` (optional)
+- `ADMIN_IDS` (optional)
+- `REPO_URL` (optional; defaults to the current GitHub repo)
+
+Secrets (Repository → Settings → Secrets):
+
+- `SSH_PRIVATE_KEY` (required; CI → server SSH key)
+- `BOT_TOKEN` (optional)
+- `REPO_SSH_KEY` (optional; server → GitHub Deploy Key private key; needed for private repos)
+
+### GitLab CI variables
+
+Add these in GitLab: **Settings → CI/CD → Variables**.
+
+- `SERVER_HOST`
+- `SERVER_USER`
+- `SSH_PRIVATE_KEY` (required; CI → server SSH key)
+- `PROJECT_PATH`
+- `PROJECT_NAME`
+- `BOT_TOKEN` (required)
+- `DOMAIN_NAME` (optional)
+- `TRAEFIK_NETWORK`
+- `TRAEFIK_ENTRYPOINT` (optional)
+- `TRAEFIK_ENABLE` (optional)
+- `REPO_URL` (required; e.g. `https://github.com/<owner>/<repo>.git`)
+- `REPO_SSH_KEY` (optional; Deploy Key private key for private repos)
+- `GIT_BRANCH` (optional; defaults to GitLab branch)
 
 
 ## Network

@@ -4,7 +4,7 @@ global:
 
 api:
   dashboard: true
-  insecure: true # For local development, set to false in production and use basic auth
+  insecure: true # Bound to localhost in docker-compose.yml; for public access use a router + Basic Auth.
 
 providers:
   docker:
@@ -29,12 +29,4 @@ entryPoints:
     http:
       tls:
         certResolver: myresolver
-
-certificatesResolvers:
-  myresolver:
-    acme:
-      email: "EMAIL_PLACEHOLDER"
-      storage: "/acme.json"
-      httpChallenge:
-        entryPoint: http
 

@@ -174,126 +174,43 @@ EOF
     
     chmod 600 traefik/acme.json
 
-        # Dashboard Setup
-        ask_yes_no "Do you want to enable the Traefik Dashboard with Basic Auth?"
-        if [ $? -eq 0 ]; then
-                enable_dashboard="y"
-                read -p "Enter Dashboard Domain (e.g. traefik.yourdomain.com): " dashboard_domain
-                read -p "Enter Dashboard Username: " dashboard_user
-                read -s -p "Enter Dashboard Password: " dashboard_pass
-                echo ""
+    # Dashboard Setup (optional override)
+    ask_yes_no "Do you want to expose the Traefik Dashboard via HTTPS + Basic Auth?"
+    if [ $? -eq 0 ]; then
+        read -p "Enter Dashboard Domain (e.g. traefik.yourdomain.com): " dashboard_domain
+        read -p "Enter Dashboard Username: " dashboard_user
+        read -s -p "Enter Dashboard Password: " dashboard_pass
+        echo ""
 
-                echo -e "${BLUE}>>> Generating password hash...${NC}"
-                if ! docker image inspect httpd:alpine &> /dev/null; then
-                         echo "Pulling helper image..."
-                         docker pull -q httpd:alpine
-                fi
-
-                hash=$(docker run --rm httpd:alpine htpasswd -Bbn "$dashboard_user" "$dashboard_pass")
-                # Escape $ -> $$ for docker-compose label values
-                docker_compose_hash="${hash//\$/\$\$}"
-        else
-                enable_dashboard="n"
+        echo -e "${BLUE}>>> Generating password hash...${NC}"
+        if ! docker image inspect httpd:alpine &> /dev/null; then
+            echo "Pulling helper image..."
+            docker pull -q httpd:alpine
         fi
 
-        # Generate traefik.yml (no in-place edits)
-        if [[ "$enable_dashboard" =~ ^[Yy]$ ]]; then
-                insecure_value="false"
-        else
-                insecure_value="true"
-        fi
+        hash=$(docker run --rm httpd:alpine htpasswd -Bbn "$dashboard_user" "$dashboard_pass")
 
-        cat > traefik/traefik.yml <<EOF
-global:
-    checkNewVersion: true
-    sendAnonymousUsage: false
+        printf '%s\n' "TRAEFIK_DASHBOARD_DOMAIN=$dashboard_domain" >> .env
+        printf '%s\n' "TRAEFIK_DASHBOARD_BASIC_AUTH_USERS=$hash" >> .env
 
-api:
-    dashboard: true
-    insecure: $insecure_value
-
-providers:
-    docker:
-        endpoint: "unix:///var/run/docker.sock"
-        exposedByDefault: false
-    file:
-        filename: /etc/traefik/dynamic.yml
-        watch: true
-
-entryPoints:
-    http:
-        address: ":80"
-        http:
-            redirections:
-                entryPoint:
-                    to: https
-                    scheme: https
-
-    https:
-        address: ":443"
-
-certificatesResolvers:
-    myresolver:
-        acme:
-            email: "$email"
-            storage: "/acme.json"
-            httpChallenge:
-                entryPoint: http
-EOF
-
-        # Generate docker-compose.yml (no in-place edits)
-        cat > docker-compose.yml <<EOF
+        # Compose override is auto-loaded by docker compose
+        cat > docker-compose.override.yml <<'EOF'
 services:
-    traefik:
-        image: traefik:v3.6
-        container_name: traefik
-        restart: unless-stopped
-        security_opt:
-            - no-new-privileges:true
-        environment:
-            - DOCKER_API_VERSION=1.44
-        command:
-            - "--configFile=/etc/traefik/traefik.yml"
-        ports:
-            - "80:80"
-            - "443:443"
+  traefik:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DASHBOARD_DOMAIN?TRAEFIK_DASHBOARD_DOMAIN must be set}`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=dashboard-auth,dashboard-redirect"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_BASIC_AUTH_USERS?TRAEFIK_DASHBOARD_BASIC_AUTH_USERS must be set}"
+      - "traefik.http.middlewares.dashboard-redirect.redirectregex.regex=^https?://[^/]+/$$"
+      - "traefik.http.middlewares.dashboard-redirect.redirectregex.replacement=https://${TRAEFIK_DASHBOARD_DOMAIN}/dashboard/"
+      - "traefik.http.middlewares.dashboard-redirect.redirectregex.permanent=true"
+      - "traefik.http.routers.dashboard.entrypoints=https"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
 EOF
-
-        if [[ "$enable_dashboard" =~ ^[Yy]$ ]]; then
-                cat >> docker-compose.yml <<EOF
-        labels:
-            - "traefik.enable=true"
-            - "traefik.http.routers.dashboard.rule=Host(\`$dashboard_domain\`)"
-            - "traefik.http.routers.dashboard.service=api@internal"
-            - "traefik.http.routers.dashboard.middlewares=auth,dashboard-redirect"
-            - "traefik.http.middlewares.auth.basicauth.users=$docker_compose_hash"
-            - "traefik.http.middlewares.dashboard-redirect.redirectregex.regex=^https?://[^/]+/\$\$"
-            - "traefik.http.middlewares.dashboard-redirect.redirectregex.replacement=https://$dashboard_domain/dashboard/"
-            - "traefik.http.middlewares.dashboard-redirect.redirectregex.permanent=true"
-            - "traefik.http.routers.dashboard.entrypoints=https"
-            - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
-EOF
-        else
-                # Keep insecure dashboard port for dev-only usage
-                cat >> docker-compose.yml <<EOF
-            # Dashboard port (insecure mode - for dev only, or protect with middleware)
-            - "8080:8080"
-EOF
-        fi
-
-        cat >> docker-compose.yml <<EOF
-        volumes:
-            - /var/run/docker.sock:/var/run/docker.sock:ro
-            - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
-            - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
-            - ./traefik/acme.json:/acme.json
-        networks:
-            - proxy-public
-
-networks:
-    proxy-public:
-        name: proxy-public
-EOF
+    fi
     
     # Ensure proxy-public network exists
     if ! docker network inspect proxy-public >/dev/null 2>&1; then
@@ -306,7 +223,7 @@ EOF
     echo -e "To start it:"
     echo -e "  cd $TARGET_DIR"
     echo -e "  docker compose up -d"
-    if [[ "$enable_dashboard" =~ ^[Yy]$ ]]; then
+    if [ -f docker-compose.override.yml ]; then
         echo -e "  Dashboard: https://$dashboard_domain/dashboard/ (Don't forget the trailing slash!)"
     fi
 }

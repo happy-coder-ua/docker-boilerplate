@@ -9,12 +9,15 @@ services:
       - DOCKER_API_VERSION=1.44
     command:
       - "--configFile=/etc/traefik/traefik.yml"
+      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL?ACME_EMAIL must be set}"
+      - "--certificatesresolvers.myresolver.acme.storage=/acme.json"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=http"
     ports:
       - "80:80"
 
       - "443:443"
-      # Dashboard port (insecure mode - for dev only, or protect with middleware)
-      - "8080:8080"
+      # Dashboard port (insecure mode). Bound to localhost; use override for HTTPS+BasicAuth.
+      - "127.0.0.1:8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro

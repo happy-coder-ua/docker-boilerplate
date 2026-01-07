@@ -8,14 +8,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'npm'
-    - run: npm ci
-    - run: npm run lint
-    - run: npm run build
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
 
   deploy:
     needs: build
@@ -23,11 +23,14 @@ jobs:
     uses: ./.github/workflows/deploy.yml
     with:
       GIT_BRANCH: ${{ github.ref_name }}
+      REPO_URL: ${{ vars.REPO_URL != '' && vars.REPO_URL || format('https://github.com/{0}.git', github.repository) }}
       SERVER_HOST: ${{ vars.SERVER_HOST }}
       SERVER_USER: ${{ vars.SERVER_USER }}
       PROJECT_PATH: ${{ vars.PROJECT_PATH }}
       PROJECT_NAME: ${{ vars.PROJECT_NAME }}
       DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
       TRAEFIK_NETWORK: ${{ vars.TRAEFIK_NETWORK }}
+      TRAEFIK_ENTRYPOINT: ${{ vars.TRAEFIK_ENTRYPOINT }}
     secrets:
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      REPO_SSH_KEY: ${{ secrets.REPO_SSH_KEY }}

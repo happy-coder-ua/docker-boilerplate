@@ -16,7 +16,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.${PROJECT_NAME}-dev.rule=Host(`${DOMAIN_NAME?DOMAIN_NAME must be set}`)"
-      - "traefik.http.routers.${PROJECT_NAME}-dev.entrypoints=https"
+      - "traefik.http.routers.${PROJECT_NAME}-dev.entrypoints=${TRAEFIK_ENTRYPOINT:-https}"
       - "traefik.http.routers.${PROJECT_NAME}-dev.tls=true"
       - "traefik.http.services.${PROJECT_NAME}-dev.loadbalancer.server.port=5173"
       - "traefik.docker.network=${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}"
