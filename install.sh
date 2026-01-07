@@ -659,9 +659,115 @@ EOF
     echo -e "  4. docker compose up -d --build"
 }
 
+# Function to setup Portainer
+setup_portainer() {
+    echo -e "\n${BLUE}>>> Generating Portainer Project...${NC}"
+    read -p "Enter project name (folder name): " folder_name
+
+    traefik_network="proxy-public"
+    echo -e "Enter the domain for your LOCAL/PROD environment (e.g., portainer.yourdomain.com or ${folder_name}.docker.localhost)."
+    read -p "Domain [${folder_name}.docker.localhost]: " domain_name
+    [ -z "$domain_name" ] && domain_name="${folder_name}.docker.localhost"
+
+    # Network Selection
+    networks=()
+    while IFS= read -r line; do
+        [ -n "$line" ] && networks+=("$line")
+    done < <(docker network ls --format "{{.Name}}" | grep -v "bridge\|host\|none")
+
+    # Check if proxy-public exists in the list
+    local found_proxy=0
+    for n in "${networks[@]}"; do
+        if [[ "$n" == "proxy-public" ]]; then
+            found_proxy=1
+            break
+        fi
+    done
+
+    if [ $found_proxy -eq 0 ]; then
+        networks+=("proxy-public (Create new)")
+    fi
+    networks+=("Manual Input")
+
+    interactive_menu "Select Docker Network for Traefik" "${networks[@]}"
+    local net_choice=$?
+    local selected="${networks[$net_choice]}"
+
+    if [[ "$selected" == "Manual Input" ]]; then
+         read -p "Enter Docker Network Name: " traefik_network
+    elif [[ "$selected" == "proxy-public (Create new)" ]]; then
+         traefik_network="proxy-public"
+    else
+         traefik_network="$selected"
+    fi
+
+    if [ -d "$folder_name" ]; then
+        echo -e "${RED}Directory $folder_name already exists. Please choose another name.${NC}"
+        return
+    fi
+
+    cp -r "$TEMPLATES_DIR/portainer" "$folder_name"
+    cd "$folder_name" || exit
+
+    project_name_sanitized=$(echo "$folder_name" | tr -cd '[:alnum:]-')
+
+    # Write .env safely (avoid $ expansion in bcrypt hashes)
+    : > .env
+    printf '%s\n' "PROJECT_NAME=$project_name_sanitized" >> .env
+    printf '%s\n' "DOMAIN_NAME=$domain_name" >> .env
+    printf '%s\n' "TRAEFIK_NETWORK=$traefik_network" >> .env
+
+    ask_yes_no "Do you want to protect Portainer with Traefik Basic Auth (recommended)?"
+    if [ $? -eq 0 ]; then
+        read -p "Basic Auth Username: " basic_user
+        read -s -p "Basic Auth Password: " basic_pass
+        echo ""
+
+        echo -e "${BLUE}>>> Generating password hash...${NC}"
+        if ! docker image inspect httpd:alpine &> /dev/null; then
+            echo "Pulling helper image..."
+            docker pull -q httpd:alpine
+        fi
+
+        hash=$(docker run --rm httpd:alpine htpasswd -Bbn "$basic_user" "$basic_pass")
+        printf '%s\n' "PORTAINER_BASIC_AUTH_USERS=$hash" >> .env
+
+        # Compose override is auto-loaded by docker compose
+        cat > docker-compose.override.yml <<'EOF'
+services:
+  portainer:
+    labels:
+      - "traefik.http.routers.${PROJECT_NAME}.middlewares=${PROJECT_NAME}-auth"
+      - "traefik.http.middlewares.${PROJECT_NAME}-auth.basicauth.users=${PORTAINER_BASIC_AUTH_USERS?PORTAINER_BASIC_AUTH_USERS must be set}"
+EOF
+    fi
+
+    # Ensure proxy-public network exists
+    if [ "$traefik_network" == "proxy-public" ]; then
+        if ! docker network inspect proxy-public >/dev/null 2>&1; then
+            echo -e "${BLUE}>>> Creating external network 'proxy-public'...${NC}"
+            docker network create proxy-public
+        fi
+    else
+        if ! docker network inspect "$traefik_network" >/dev/null 2>&1; then
+             echo -e "${YELLOW}Warning: Network '$traefik_network' does not exist. You may need to create it manually.${NC}"
+        fi
+    fi
+
+    git init -q
+
+    echo -e "${GREEN}Success!${NC}"
+    echo -e "Created standalone project in: ${BLUE}$(pwd)${NC}"
+    echo -e "Next steps:"
+    echo -e "  1. cd $folder_name"
+    echo -e "  2. git add ."
+    echo -e "  3. git commit -m 'Initial commit'"
+    echo -e "  4. docker compose up -d"
+}
+
 # Main Menu
 while true; do
-    options=("Global Proxy (Traefik)" "Web Project (Next.js)" "React + Vite Project" "Telegram Bot" "Quit")
+    options=("Global Proxy (Traefik)" "Web Project (Next.js)" "React + Vite Project" "Telegram Bot" "Portainer" "Quit")
     interactive_menu "Main Menu" "${options[@]}"
     choice=$?
     
@@ -670,6 +776,7 @@ while true; do
         1) setup_web; break ;;
         2) setup_vite_react; break ;;
         3) setup_bot; break ;;
-        4) echo "Exiting..."; exit 0 ;;
+        4) setup_portainer; break ;;
+        5) echo "Exiting..."; exit 0 ;;
     esac
 done

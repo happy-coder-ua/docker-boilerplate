@@ -13,6 +13,7 @@ This repository is a **generator**, not a deployable app. The only “runtime”
   - `templates/nextjs/`: Next.js web app (Docker + CI/CD).
   - `templates/vite-react/`: React + Vite web app (Docker + CI/CD).
   - `templates/bot/`: Node.js Telegram bot (Docker + CI/CD).
+  - `templates/portainer/`: Portainer (Docker UI) behind Traefik (+ optional Basic Auth).
 
 ## Non-Negotiable Conventions
 - **No in-place patching**: avoid `sed -i`/mutating copied files after the fact. Prefer copying templates as-is and writing `.env` via heredocs.

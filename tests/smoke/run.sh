@@ -149,4 +149,19 @@ EOF
 validate_compose "$BOT_DIR"
 build_dockerfile "$BOT_DIR" "smoke-bot:latest"
 
+# -------------------- Portainer --------------------
+log "Test: templates/portainer (overlay + compose config)"
+ensure_proxy_network
+
+PORTAINER_DIR="$TMP/portainer-app"
+cp -r "$TEMPLATES_DIR/portainer" "$PORTAINER_DIR"
+
+cat >"$PORTAINER_DIR/.env" <<EOF
+PROJECT_NAME=portainer-app
+DOMAIN_NAME=portainer-app.docker.localhost
+TRAEFIK_NETWORK=proxy-public
+EOF
+
+validate_compose "$PORTAINER_DIR"
+
 log "OK: all template smoke tests passed"

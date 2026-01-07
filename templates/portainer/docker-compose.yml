@@ -1,0 +1,27 @@
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: ${PROJECT_NAME?PROJECT_NAME must be set}
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}"
+      - "traefik.http.routers.${PROJECT_NAME}.rule=Host(`${DOMAIN_NAME?DOMAIN_NAME must be set}`)"
+      - "traefik.http.routers.${PROJECT_NAME}.entrypoints=https"
+      - "traefik.http.routers.${PROJECT_NAME}.tls=true"
+      - "traefik.http.services.${PROJECT_NAME}.loadbalancer.server.port=9000"
+    networks:
+      - proxy-public
+
+volumes:
+  portainer_data:
+
+networks:
+  proxy-public:
+    external: true
+    name: ${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}
