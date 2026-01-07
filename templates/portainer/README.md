@@ -20,15 +20,19 @@ Portainer will ask you to create an admin user on first run.
 
 ## Optional: add Traefik Basic Auth
 
-If you want an extra auth prompt *before* Portainer, create `docker-compose.override.yml` with Traefik middleware labels.
+If you want an extra auth prompt *before* Portainer, you can add Traefik Basic Auth middleware labels.
 
-Generate bcrypt htpasswd (example):
+CI/CD recommended:
 
-- `docker run --rm httpd:alpine htpasswd -Bbn admin 'your-password'`
+- Set `PORTAINER_BASIC_AUTH_USER` (variable) and `PORTAINER_BASIC_AUTH_PASSWORD` (secret/masked).
+- The deploy workflow will generate `docker-compose.override.yml` on the server.
+- If one of them is missing, the workflow removes its generated override (auth disabled).
 
-Put the full `admin:$2y$...` line into `.env` as `PORTAINER_BASIC_AUTH_USERS=...`.
+Manual option:
 
-If you generate the project via `install.sh`, it can create the override file for you.
+1. Generate bcrypt htpasswd (example): `docker run --rm httpd:alpine htpasswd -Bbn admin 'your-password'`
+2. Put the resulting `admin:$2y$...` line **directly** into `docker-compose.override.yml` (not `.env`).
+	- Note: Docker Compose treats `$` as interpolation marker, so escape dollars in label values: `admin:$$2y$$...`.
 
 ## Production Deploy (CI/CD)
 
@@ -47,13 +51,14 @@ Variables (Repository → Settings → Variables):
 - `DOMAIN_NAME`
 - `TRAEFIK_NETWORK`
 - `TRAEFIK_ENTRYPOINT` (optional; e.g. `websecure` if your Traefik doesn't have `https`)
-- `PORTAINER_BASIC_AUTH_USERS` (optional)
+- `PORTAINER_BASIC_AUTH_USER` (optional; enables Basic Auth when password is also set)
 - `REPO_URL` (optional; defaults to the current GitHub repo)
 
 Secrets (Repository → Settings → Secrets):
 
 - `SSH_PRIVATE_KEY` (required; CI → server SSH key)
 - `REPO_SSH_KEY` (optional; server → GitHub Deploy Key private key; needed for private repos)
+- `PORTAINER_BASIC_AUTH_PASSWORD` (optional; Basic Auth password; keep as secret)
 
 ## GitLab CI variables
 
@@ -67,7 +72,8 @@ Add these in GitLab: **Settings → CI/CD → Variables**.
 - `DOMAIN_NAME`
 - `TRAEFIK_NETWORK`
 - `TRAEFIK_ENTRYPOINT` (optional)
-- `PORTAINER_BASIC_AUTH_USERS` (optional)
+- `PORTAINER_BASIC_AUTH_USER` (optional)
+- `PORTAINER_BASIC_AUTH_PASSWORD` (optional; set as masked/protected variable)
 - `REPO_URL` (required; e.g. `https://github.com/<owner>/<repo>.git`)
 - `REPO_SSH_KEY` (optional; Deploy Key private key for private repos)
 - `GIT_BRANCH` (optional; defaults to GitLab branch)

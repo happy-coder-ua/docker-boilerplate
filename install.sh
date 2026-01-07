@@ -174,43 +174,11 @@ EOF
     
     chmod 600 traefik/acme.json
 
-    # Dashboard Setup (optional override)
-    ask_yes_no "Do you want to expose the Traefik Dashboard via HTTPS + Basic Auth?"
-    if [ $? -eq 0 ]; then
-        read -p "Enter Dashboard Domain (e.g. traefik.yourdomain.com): " dashboard_domain
-        read -p "Enter Dashboard Username: " dashboard_user
-        read -s -p "Enter Dashboard Password: " dashboard_pass
-        echo ""
-
-        echo -e "${BLUE}>>> Generating password hash...${NC}"
-        if ! docker image inspect httpd:alpine &> /dev/null; then
-            echo "Pulling helper image..."
-            docker pull -q httpd:alpine
-        fi
-
-        hash=$(docker run --rm httpd:alpine htpasswd -Bbn "$dashboard_user" "$dashboard_pass")
-
-        printf '%s\n' "TRAEFIK_DASHBOARD_DOMAIN=$dashboard_domain" >> .env
-        printf '%s\n' "TRAEFIK_DASHBOARD_BASIC_AUTH_USERS=$hash" >> .env
-
-        # Compose override is auto-loaded by docker compose
-        cat > docker-compose.override.yml <<'EOF'
-services:
-  traefik:
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DASHBOARD_DOMAIN?TRAEFIK_DASHBOARD_DOMAIN must be set}`)"
-      - "traefik.http.routers.dashboard.service=api@internal"
-      - "traefik.http.routers.dashboard.middlewares=dashboard-auth,dashboard-redirect"
-      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_BASIC_AUTH_USERS?TRAEFIK_DASHBOARD_BASIC_AUTH_USERS must be set}"
-      - "traefik.http.middlewares.dashboard-redirect.redirectregex.regex=^https?://[^/]+/$$"
-      - "traefik.http.middlewares.dashboard-redirect.redirectregex.replacement=https://${TRAEFIK_DASHBOARD_DOMAIN}/dashboard/"
-      - "traefik.http.middlewares.dashboard-redirect.redirectregex.permanent=true"
-      - "traefik.http.routers.dashboard.entrypoints=https"
-      - "traefik.http.routers.dashboard.tls=true"
-      - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
-EOF
-    fi
+        echo -e "${BLUE}>>> Note:${NC} Traefik dashboard is bound to 127.0.0.1:8080 by default (not public)."
+        echo -e "    To expose it via HTTPS + Basic Auth, use CI/CD variables/secrets and let deploy generate docker-compose.override.yml:"
+        echo -e "    - Variable: TRAEFIK_DASHBOARD_DOMAIN"
+        echo -e "    - Variable: TRAEFIK_DASHBOARD_BASIC_AUTH_USER"
+        echo -e "    - Secret:   TRAEFIK_DASHBOARD_BASIC_AUTH_PASSWORD"
     
     # Ensure proxy-public network exists
     if ! docker network inspect proxy-public >/dev/null 2>&1; then
@@ -634,30 +602,10 @@ setup_portainer() {
     printf '%s\n' "DOMAIN_NAME=$domain_name" >> .env
     printf '%s\n' "TRAEFIK_NETWORK=$traefik_network" >> .env
 
-    ask_yes_no "Do you want to protect Portainer with Traefik Basic Auth (recommended)?"
-    if [ $? -eq 0 ]; then
-        read -p "Basic Auth Username: " basic_user
-        read -s -p "Basic Auth Password: " basic_pass
-        echo ""
-
-        echo -e "${BLUE}>>> Generating password hash...${NC}"
-        if ! docker image inspect httpd:alpine &> /dev/null; then
-            echo "Pulling helper image..."
-            docker pull -q httpd:alpine
-        fi
-
-        hash=$(docker run --rm httpd:alpine htpasswd -Bbn "$basic_user" "$basic_pass")
-        printf '%s\n' "PORTAINER_BASIC_AUTH_USERS=$hash" >> .env
-
-        # Compose override is auto-loaded by docker compose
-        cat > docker-compose.override.yml <<'EOF'
-services:
-  portainer:
-    labels:
-      - "traefik.http.routers.${PROJECT_NAME}.middlewares=${PROJECT_NAME}-auth"
-      - "traefik.http.middlewares.${PROJECT_NAME}-auth.basicauth.users=${PORTAINER_BASIC_AUTH_USERS?PORTAINER_BASIC_AUTH_USERS must be set}"
-EOF
-    fi
+        echo -e "${BLUE}>>> Note:${NC} Traefik Basic Auth is configured via CI/CD variables/secrets (recommended)."
+        echo -e "    - Variable: PORTAINER_BASIC_AUTH_USER"
+        echo -e "    - Secret:   PORTAINER_BASIC_AUTH_PASSWORD"
+        echo -e "    For local/manual usage, create docker-compose.override.yml as described in README.md."
 
     # Ensure proxy-public network exists
     if [ "$traefik_network" == "proxy-public" ]; then

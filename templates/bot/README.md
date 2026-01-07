@@ -2,13 +2,11 @@
 
 This is a standalone Telegram Bot project (Node.js/Telegraf) ready to be deployed with Docker.
 
-## Intended Workflow (Local Generation)
+## Intended Workflow
 
-- Generate and develop locally.
+- Generate (locally or on a VPS) and develop locally.
 - Push to Git.
 - Deploy to VPS via CI/CD (GitHub Actions / GitLab CI).
-
-This project is not meant to be generated on a VPS.
 
 ## Local Setup
 

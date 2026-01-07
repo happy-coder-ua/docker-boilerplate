@@ -1,0 +1,193 @@
+stages:
+  - deploy
+
+deploy:
+  stage: deploy
+  image: alpine:latest
+  rules:
+    - if: '$SERVER_HOST && $SERVER_USER && $SSH_PRIVATE_KEY && $PROJECT_PATH && $ACME_EMAIL && $REPO_URL'
+      when: on_success
+    - when: never
+  before_script:
+    - 'which ssh-agent || ( apk add --update openssh git docker-cli )'
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan $SERVER_HOST >> ~/.ssh/known_hosts
+  script:
+    - |
+      set -euo pipefail
+
+      : "${SERVER_HOST:?SERVER_HOST is required}"
+      : "${SERVER_USER:?SERVER_USER is required}"
+      : "${SSH_PRIVATE_KEY:?SSH_PRIVATE_KEY is required}"
+      : "${PROJECT_PATH:?PROJECT_PATH is required}"
+      : "${ACME_EMAIL:?ACME_EMAIL is required}"
+      : "${REPO_URL:?REPO_URL is required}"
+
+      branch="${GIT_BRANCH:-${CI_COMMIT_BRANCH:-main}}"
+
+      PROJECT_PATH_B64="$(printf '%s' "$PROJECT_PATH" | base64 | tr -d '\n')"
+      REPO_URL_B64="$(printf '%s' "$REPO_URL" | base64 | tr -d '\n')"
+      BRANCH_B64="$(printf '%s' "$branch" | base64 | tr -d '\n')"
+      ACME_EMAIL_B64="$(printf '%s' "$ACME_EMAIL" | base64 | tr -d '\n')"
+      TRAEFIK_DASHBOARD_DOMAIN_B64="$(printf '%s' "${TRAEFIK_DASHBOARD_DOMAIN:-}" | base64 | tr -d '\n')"
+      TRAEFIK_DASHBOARD_BASIC_AUTH_USER_B64="$(printf '%s' "${TRAEFIK_DASHBOARD_BASIC_AUTH_USER:-}" | base64 | tr -d '\n')"
+      TRAEFIK_DASHBOARD_BASIC_AUTH_PASSWORD_B64="$(printf '%s' "${TRAEFIK_DASHBOARD_BASIC_AUTH_PASSWORD:-}" | base64 | tr -d '\n')"
+
+      REPO_SSH_KEY_B64=""
+      if [ -n "${REPO_SSH_KEY:-}" ]; then
+        REPO_SSH_KEY_B64="$(printf '%s' "$REPO_SSH_KEY" | base64 | tr -d '\n')"
+      fi
+
+      ssh "$SERVER_USER@$SERVER_HOST" \
+        "PROJECT_PATH_B64='$PROJECT_PATH_B64' REPO_URL_B64='$REPO_URL_B64' BRANCH_B64='$BRANCH_B64' ACME_EMAIL_B64='$ACME_EMAIL_B64' TRAEFIK_DASHBOARD_DOMAIN_B64='$TRAEFIK_DASHBOARD_DOMAIN_B64' TRAEFIK_DASHBOARD_BASIC_AUTH_USER_B64='$TRAEFIK_DASHBOARD_BASIC_AUTH_USER_B64' TRAEFIK_DASHBOARD_BASIC_AUTH_PASSWORD_B64='$TRAEFIK_DASHBOARD_BASIC_AUTH_PASSWORD_B64' REPO_SSH_KEY_B64='$REPO_SSH_KEY_B64'" \
+        'sh -s' <<'REMOTE'
+      set -euo pipefail
+
+      PROJECT_PATH="$(printf '%s' "$PROJECT_PATH_B64" | base64 -d)"
+      REPO_URL="$(printf '%s' "$REPO_URL_B64" | base64 -d)"
+      branch="$(printf '%s' "$BRANCH_B64" | base64 -d)"
+      ACME_EMAIL="$(printf '%s' "$ACME_EMAIL_B64" | base64 -d | tr -d '\r' | head -n 1)"
+      DASHBOARD_DOMAIN="$(printf '%s' "$TRAEFIK_DASHBOARD_DOMAIN_B64" | base64 -d | tr -d '\r' | head -n 1)"
+      DASHBOARD_USER="$(printf '%s' "$TRAEFIK_DASHBOARD_BASIC_AUTH_USER_B64" | base64 -d | tr -d '\r' | head -n 1)"
+      DASHBOARD_PASS="$(printf '%s' "$TRAEFIK_DASHBOARD_BASIC_AUTH_PASSWORD_B64" | base64 -d | tr -d '\r' | head -n 1)"
+
+      if ! command -v git >/dev/null 2>&1; then
+        echo "git is not installed on the server" >&2
+        exit 1
+      fi
+
+      if ! command -v docker >/dev/null 2>&1; then
+        echo "docker is not installed on the server" >&2
+        exit 1
+      fi
+
+      COMPOSE_BIN="docker compose"
+      if ! docker compose version >/dev/null 2>&1; then
+        if command -v docker-compose >/dev/null 2>&1; then
+          COMPOSE_BIN="docker-compose"
+        else
+          echo "Docker Compose is not available (neither 'docker compose' nor 'docker-compose')" >&2
+          exit 1
+        fi
+      fi
+
+      clone_url="$REPO_URL"
+      if [ -n "${REPO_SSH_KEY_B64:-}" ]; then
+        mkdir -p "$HOME/.ssh"
+        chmod 700 "$HOME/.ssh"
+        key_path="$HOME/.ssh/repo_deploy_key"
+        printf '%s' "$REPO_SSH_KEY_B64" | base64 -d > "$key_path"
+        chmod 600 "$key_path"
+        touch "$HOME/.ssh/known_hosts"
+        chmod 600 "$HOME/.ssh/known_hosts"
+
+        repo_host=""
+        case "$REPO_URL" in
+          git@*:* ) repo_host="$(printf '%s' "$REPO_URL" | awk -F'[@:]' '{print $2}')" ;;
+          https://*/* ) repo_host="$(printf '%s' "$REPO_URL" | awk -F[/:] '{print $4}')" ;;
+        esac
+        if [ -n "$repo_host" ]; then
+          if ! ssh-keygen -F "$repo_host" >/dev/null 2>&1; then
+            ssh-keyscan -H "$repo_host" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
+          fi
+        fi
+
+        export GIT_SSH_COMMAND="ssh -i $key_path -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
+        if printf '%s' "$REPO_URL" | grep -q '^https\?://'; then
+          repo_host="$(printf '%s' "$REPO_URL" | awk -F[/:] '{print $4}')"
+          repo_path="$(printf '%s' "$REPO_URL" | sed -E 's#^https?://[^/]+/##')"
+          repo_path="${repo_path%.git}"
+          clone_url="git@${repo_host}:${repo_path}.git"
+        fi
+      fi
+
+      if [ ! -d "$PROJECT_PATH" ]; then
+        mkdir -p "$(dirname "$PROJECT_PATH")"
+        git clone --branch "$branch" "$clone_url" "$PROJECT_PATH"
+      fi
+
+      if [ -d "$PROJECT_PATH" ] && [ ! -d "$PROJECT_PATH/.git" ]; then
+        if [ -z "$(ls -A "$PROJECT_PATH" 2>/dev/null || true)" ]; then
+          rmdir "$PROJECT_PATH" 2>/dev/null || true
+          mkdir -p "$(dirname "$PROJECT_PATH")"
+          git clone --branch "$branch" "$clone_url" "$PROJECT_PATH"
+        else
+          echo "Not a git repository: $PROJECT_PATH (missing .git)" >&2
+          exit 1
+        fi
+      fi
+
+      cd "$PROJECT_PATH"
+
+      if [ ! -f docker-compose.yml ]; then
+        echo "docker-compose.yml not found in $PROJECT_PATH" >&2
+        exit 1
+      fi
+
+      git remote set-url origin "$clone_url" || true
+      if ! git pull origin "$branch"; then
+        echo "git pull failed. If this is a private repository, set REPO_SSH_KEY in GitLab CI variables." >&2
+        exit 1
+      fi
+
+      if [ -z "$ACME_EMAIL" ]; then
+        echo "ACME_EMAIL is empty" >&2
+        exit 1
+      fi
+
+      if [ -f traefik/acme.json ]; then
+        chmod 600 traefik/acme.json || true
+      fi
+
+      # Write .env
+      tmp="$(mktemp)"
+      if [ -f .env ]; then
+        grep -vE '^(ACME_EMAIL|TRAEFIK_DASHBOARD_DOMAIN)=' .env > "$tmp" || true
+      fi
+
+      : > .env
+      printf '%s\n' "ACME_EMAIL=$ACME_EMAIL" >> .env
+      if [ -n "$DASHBOARD_DOMAIN" ]; then
+        printf '%s\n' "TRAEFIK_DASHBOARD_DOMAIN=$DASHBOARD_DOMAIN" >> .env
+      fi
+      if [ -s "$tmp" ]; then cat "$tmp" >> .env; fi
+      rm -f "$tmp"
+
+      # Optional: dashboard exposure via HTTPS + Basic Auth
+      if [ -n "$DASHBOARD_DOMAIN" ] && [ -n "$DASHBOARD_USER" ] && [ -n "$DASHBOARD_PASS" ]; then
+        if ! docker image inspect httpd:alpine >/dev/null 2>&1; then
+          docker pull -q httpd:alpine
+        fi
+        HTPASSWD_LINE="$(docker run --rm httpd:alpine htpasswd -Bbn "$DASHBOARD_USER" "$DASHBOARD_PASS" | head -n 1)"
+        HTPASSWD_LINE_COMPOSE="$(printf '%s' "$HTPASSWD_LINE" | sed 's/\$/\$\$/g')"
+
+        {
+          echo "# Generated by CI (Traefik Dashboard HTTPS + Basic Auth)"
+          echo "services:"
+          echo "  traefik:"
+          echo "    labels:"
+          echo "      - \"traefik.enable=true\""
+          echo "      - \"traefik.http.routers.dashboard.rule=Host(\`${DASHBOARD_DOMAIN}\`)\""
+          echo "      - \"traefik.http.routers.dashboard.service=api@internal\""
+          echo "      - \"traefik.http.routers.dashboard.middlewares=dashboard-auth,dashboard-redirect\""
+          echo "      - \"traefik.http.middlewares.dashboard-auth.basicauth.users=${HTPASSWD_LINE_COMPOSE}\""
+          echo "      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.regex=^https?://[^/]+/\\$\\$\""
+          echo "      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.replacement=https://${DASHBOARD_DOMAIN}/dashboard/\""
+          echo "      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.permanent=true\""
+          echo "      - \"traefik.http.routers.dashboard.entrypoints=https\""
+          echo "      - \"traefik.http.routers.dashboard.tls=true\""
+          echo "      - \"traefik.http.routers.dashboard.tls.certresolver=myresolver\""
+        } > docker-compose.override.yml
+      else
+        if [ -f docker-compose.override.yml ] && head -n 1 docker-compose.override.yml | grep -q '^# Generated by CI (Traefik Dashboard HTTPS + Basic Auth)$'; then
+          rm -f docker-compose.override.yml
+        fi
+      fi
+
+      $COMPOSE_BIN up -d
+      docker image prune -f
+      REMOTE

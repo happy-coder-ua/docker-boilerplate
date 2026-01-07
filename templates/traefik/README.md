@@ -23,13 +23,23 @@ This repository contains the configuration for the main Traefik proxy server. It
 
 By default, the dashboard is bound to `127.0.0.1:8080` (not public).
 
-If you want to expose it via a domain (recommended only with Basic Auth), create `docker-compose.override.yml`:
+If you want to expose it via a domain (recommended only with Basic Auth), use CI/CD to generate `docker-compose.override.yml` on the server.
 
-1. Generate bcrypt htpasswd (example):
-    - `docker run --rm httpd:alpine htpasswd -Bbn admin 'your-password'`
-2. Put the full `admin:$2y$...` line into `.env` as `TRAEFIK_DASHBOARD_BASIC_AUTH_USERS=...`.
+CI/CD (no hashes in variables):
+
+- Variable: `TRAEFIK_DASHBOARD_DOMAIN`
+- Variable: `TRAEFIK_DASHBOARD_BASIC_AUTH_USER`
+- Secret/masked: `TRAEFIK_DASHBOARD_BASIC_AUTH_PASSWORD`
+
+When all three are set, the deploy workflow generates a bcrypt htpasswd line on the server and writes `docker-compose.override.yml`.
+If any of them is missing, the workflow removes its generated override (dashboard stays private on `127.0.0.1:8080`).
+
+Manual option (advanced):
+
+1. Generate bcrypt htpasswd: `docker run --rm httpd:alpine htpasswd -Bbn admin 'your-password'`
+2. Put the resulting `admin:$2y$...` line directly into `docker-compose.override.yml`.
+   - Note: escape dollars for Docker Compose label values: `admin:$$2y$$...`.
 3. Set `TRAEFIK_DASHBOARD_DOMAIN=traefik.yourdomain.com` in `.env`.
-4. Create `docker-compose.override.yml` with router+middleware labels (see the generator or copy from docs).
 
 
 ## Network

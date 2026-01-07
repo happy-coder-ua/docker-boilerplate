@@ -2,13 +2,11 @@
 
 This is a standalone Next.js project ready to be deployed behind a Traefik proxy.
 
-## Intended Workflow (Local Generation)
+## Intended Workflow
 
-- Generate and develop locally.
+- Generate (locally or on a VPS) and develop locally.
 - Push to Git.
 - Deploy to VPS via CI/CD (GitHub Actions / GitLab CI).
-
-This project is not meant to be generated on a VPS.
 
 ## Local Setup
 
