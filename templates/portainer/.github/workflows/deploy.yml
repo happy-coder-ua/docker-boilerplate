@@ -70,13 +70,19 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare SSH-safe env
+        run: |
+          set -euo pipefail
+          # bcrypt htpasswd lines contain '$' and can break when exported over SSH without quoting.
+          printf '%s' "${PORTAINER_BASIC_AUTH_USERS:-}" | base64 | tr -d '\n' | sed 's/^/PORTAINER_BASIC_AUTH_USERS_B64=/' >> "$GITHUB_ENV"
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.SERVER_HOST }}
           username: ${{ env.SERVER_USER }}
           key: ${{ env.SSH_PRIVATE_KEY }}
-          envs: GIT_BRANCH,REPO_URL,REPO_SSH_KEY,PROJECT_PATH,PROJECT_NAME,DOMAIN_NAME,TRAEFIK_NETWORK,TRAEFIK_ENTRYPOINT,PORTAINER_BASIC_AUTH_USERS
+          envs: GIT_BRANCH,REPO_URL,REPO_SSH_KEY,PROJECT_PATH,PROJECT_NAME,DOMAIN_NAME,TRAEFIK_NETWORK,TRAEFIK_ENTRYPOINT,PORTAINER_BASIC_AUTH_USERS_B64
           script: |
             set -euo pipefail
 
@@ -196,6 +202,11 @@ jobs:
 
             # Create/Update .env from CI variables.
             # Preserve any extra user-defined variables in .env.
+            PORTAINER_BASIC_AUTH_USERS=""
+            if [ -n "${PORTAINER_BASIC_AUTH_USERS_B64:-}" ]; then
+              PORTAINER_BASIC_AUTH_USERS="$(printf '%s' "$PORTAINER_BASIC_AUTH_USERS_B64" | base64 -d)"
+            fi
+
             tmp="$(mktemp)"
             if [ -f .env ]; then
               grep -vE '^(PROJECT_NAME|DOMAIN_NAME|TRAEFIK_NETWORK|TRAEFIK_ENTRYPOINT|PORTAINER_BASIC_AUTH_USERS)=' .env > "$tmp" || true
