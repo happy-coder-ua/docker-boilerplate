@@ -204,7 +204,8 @@ jobs:
             # Preserve any extra user-defined variables in .env.
             PORTAINER_BASIC_AUTH_USERS=""
             if [ -n "${PORTAINER_BASIC_AUTH_USERS_B64:-}" ]; then
-              PORTAINER_BASIC_AUTH_USERS="$(printf '%s' "$PORTAINER_BASIC_AUTH_USERS_B64" | base64 -d)"
+              # Normalize possible CRLF/newlines coming from CI variables.
+              PORTAINER_BASIC_AUTH_USERS="$(printf '%s' "$PORTAINER_BASIC_AUTH_USERS_B64" | base64 -d | tr -d '\r' | head -n 1)"
             fi
 
             tmp="$(mktemp)"
