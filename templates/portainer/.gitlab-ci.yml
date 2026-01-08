@@ -119,6 +119,7 @@ deploy:
           echo "  portainer:"
           echo "    labels:"
           echo "      - \"traefik.http.routers.${PROJECT_NAME}.middlewares=${PROJECT_NAME}-auth\""
+          echo "      - \"traefik.http.middlewares.${PROJECT_NAME}-auth.basicauth.realm=${PROJECT_NAME}\""
           echo "      - \"traefik.http.middlewares.${PROJECT_NAME}-auth.basicauth.users=${BASIC_AUTH_HTPASSWD_LINE_COMPOSE}\""
         } > docker-compose.override.yml
       else
