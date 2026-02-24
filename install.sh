@@ -102,12 +102,14 @@ add_tls_certresolver_if_websecure() {
     fi
     
     # Use awk to add certresolver label after tls=true lines
+    # Extract the router name from the tls line and use it for certresolver
     awk '
         /traefik\.http\.routers\..*\.tls=true/ {
             print $0
-            # Get the project name from the previous router rule line
-            # Add the certresolver line with proper indentation
-            print "      - \"traefik.http.routers.${PROJECT_NAME}.tls.certresolver=myresolver\""
+            # Extract router name from line like: "traefik.http.routers.ROUTERNAME.tls=true"
+            match($0, /traefik\.http\.routers\.([^.]+)\.tls=true/, arr)
+            router_name = arr[1]
+            print "      - \"traefik.http.routers." router_name ".tls.certresolver=myresolver\""
             next
         }
         { print }

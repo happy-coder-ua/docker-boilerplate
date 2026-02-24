@@ -11,10 +11,10 @@ services:
     labels:
       - "traefik.enable=${TRAEFIK_ENABLE:-false}"
       - "traefik.docker.network=${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}"
-      - "traefik.http.routers.${PROJECT_NAME}.rule=Host(`${DOMAIN_NAME:-}`)"
-      - "traefik.http.routers.${PROJECT_NAME}.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
-      - "traefik.http.routers.${PROJECT_NAME}.tls=true"
-      - "traefik.http.services.${PROJECT_NAME}.loadbalancer.server.port=3000"
+      - "traefik.http.routers.${PROJECT_NAME}-bot.rule=Host(`${DOMAIN_NAME:-}`)"
+      - "traefik.http.routers.${PROJECT_NAME}-bot.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.${PROJECT_NAME}-bot.tls=true"
+      - "traefik.http.services.${PROJECT_NAME}-bot.loadbalancer.server.port=3000"
     networks:
       - proxy-public
 
