@@ -199,39 +199,45 @@ EOF
         echo ""
         
         echo -e "${BLUE}>>> Generating Basic Auth credentials...${NC}"
-        # Use Docker to generate bcrypt hash (htpasswd) and output to host file
-        # Capture both exit code and output for debugging
-        if ! command -v docker &> /dev/null; then
-            echo -e "${RED}Error: docker is not available${NC}"
-            echo -e "${YELLOW}You can create auth.txt manually:${NC}"
-            echo -e "  docker run --rm httpd:alpine htpasswd -cb - $dashboard_user PASSWORD > auth.txt"
-            dashboard_domain=""
-        else
-            # Generate htpasswd - suppress both stdout and stderr to check only exit code
+        
+        # Try to use htpasswd directly if available, otherwise use docker
+        if command -v htpasswd &> /dev/null; then
+            # Use system htpasswd (usually from apache2-utils or httpd-tools)
+            htpasswd -cb auth.txt "$dashboard_user" "$dashboard_pass" 2>&1
+            htpasswd_exit=$?
+        elif command -v docker &> /dev/null; then
+            # Fall back to Docker
             docker run --rm httpd:alpine htpasswd -cb - "$dashboard_user" "$dashboard_pass" > auth.txt 2>&1
             htpasswd_exit=$?
-            
-            # Check the generated file
-            if [ $htpasswd_exit -ne 0 ]; then
-                echo -e "${RED}Failed to generate auth credentials (exit code: $htpasswd_exit)${NC}"
-                echo -e "${YELLOW}auth.txt contents:${NC}"
-                cat auth.txt 2>/dev/null || echo "  (file not created)"
-                rm -f auth.txt
-                dashboard_domain=""
-            elif ! [ -f auth.txt ] || ! [ -s auth.txt ]; then
-                echo -e "${RED}Failed to generate auth credentials (auth.txt empty or missing)${NC}"
-                rm -f auth.txt
-                dashboard_domain=""
-            elif grep -q "^$dashboard_user:" auth.txt; then
-                # Auth file is valid (contains username line)
-                echo -e "${GREEN}Auth credentials generated successfully${NC}"
-            else
-                echo -e "${RED}Auth file format invalid${NC}"
-                echo -e "${YELLOW}auth.txt contents:${NC}"
-                cat auth.txt
-                rm -f auth.txt
-                dashboard_domain=""
-            fi
+        else
+            echo -e "${RED}Error: neither htpasswd nor docker is available${NC}"
+            echo -e "${YELLOW}Install either:${NC}"
+            echo -e "  - apache2-utils (htpasswd command), or"
+            echo -e "  - docker"
+            htpasswd_exit=1
+            dashboard_domain=""
+        fi
+        
+        # Check the generated file
+        if [ $htpasswd_exit -ne 0 ]; then
+            echo -e "${RED}Failed to generate auth credentials (exit code: $htpasswd_exit)${NC}"
+            echo -e "${YELLOW}auth.txt contents:${NC}"
+            cat auth.txt 2>/dev/null || echo "  (file not created)"
+            rm -f auth.txt
+            dashboard_domain=""
+        elif ! [ -f auth.txt ] || ! [ -s auth.txt ]; then
+            echo -e "${RED}Failed to generate auth credentials (auth.txt empty or missing)${NC}"
+            rm -f auth.txt
+            dashboard_domain=""
+        elif grep -q "^$dashboard_user:" auth.txt 2>/dev/null; then
+            # Auth file is valid (contains username line)
+            echo -e "${GREEN}Auth credentials generated successfully${NC}"
+        else
+            echo -e "${RED}Auth file format invalid${NC}"
+            echo -e "${YELLOW}auth.txt contents:${NC}"
+            cat auth.txt 2>/dev/null || echo "  (empty file)"
+            rm -f auth.txt
+            dashboard_domain=""
         fi
         
         if [ -n "$dashboard_domain" ] && [ -f auth.txt ] && [ -s auth.txt ]; then
