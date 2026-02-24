@@ -15,7 +15,6 @@ services:
       - "traefik.http.routers.dashboard.entrypoints=${TRAEFIK_ENTRYPOINT?TRAEFIK_ENTRYPOINT must be set}"
       - "traefik.http.routers.dashboard.service=api@internal"
       - "traefik.http.routers.dashboard.middlewares=auth"
-      - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
       
       # Basic Auth middleware
       - "traefik.http.middlewares.auth.basicauth.usersfile=/auth.txt"
