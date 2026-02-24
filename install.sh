@@ -200,10 +200,27 @@ EOF
         
         echo -e "${BLUE}>>> Generating Basic Auth credentials...${NC}"
         # Use Docker to generate bcrypt hash (htpasswd) and output to host file
-        # Only capture stdout (the actual hash), not stderr
-        docker run --rm httpd:alpine htpasswd -cb - "$dashboard_user" "$dashboard_pass" > auth.txt
-        htpasswd_exit=$?
-        if [ $htpasswd_exit -eq 0 ] && [ -f auth.txt ] && [ -s auth.txt ]; then
+        # Only capture stdout (the actual hash), suppress informational stderr messages
+        if ! command -v docker &> /dev/null; then
+            echo -e "${RED}Error: docker is not available${NC}"
+            echo -e "${YELLOW}You can create auth.txt manually:${NC}"
+            echo -e "  docker run --rm httpd:alpine htpasswd -cb - $dashboard_user PASSWORD > auth.txt"
+            dashboard_domain=""
+        else
+            docker run --rm httpd:alpine htpasswd -cb - "$dashboard_user" "$dashboard_pass" 2>/dev/null > auth.txt
+            htpasswd_exit=$?
+            if [ $htpasswd_exit -ne 0 ]; then
+                echo -e "${RED}Failed to generate auth credentials (exit code: $htpasswd_exit)${NC}"
+                rm -f auth.txt
+                dashboard_domain=""
+            elif ! [ -f auth.txt ] || ! [ -s auth.txt ]; then
+                echo -e "${RED}Failed to generate auth credentials (auth.txt empty or missing)${NC}"
+                rm -f auth.txt
+                dashboard_domain=""
+            fi
+        fi
+        
+        if [ -n "$dashboard_domain" ] && [ -f auth.txt ] && [ -s auth.txt ]; then
             # Copy docker-compose.override.yml from template
             cp "$TEMPLATES_DIR/traefik/docker-compose.override.yml" .
             
@@ -214,7 +231,7 @@ EOF
             echo -e "Access: ${BLUE}https://$dashboard_domain/dashboard/${NC}"
             echo -e "Username: ${BLUE}$dashboard_user${NC}"
         else
-            echo -e "${RED}Failed to generate auth credentials. Skipping dashboard setup.${NC}"
+            echo -e "${RED}Skipping dashboard setup.${NC}"
             rm -f auth.txt
         fi
     fi
