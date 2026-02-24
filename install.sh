@@ -172,8 +172,15 @@ setup_traefik() {
 ACME_EMAIL=$email
 EOF
     
+    # Initialize acme.json with empty JSON object (Traefik will populate it)
+    echo '{}' > traefik/acme.json
     chmod 600 traefik/acme.json
 
+        echo -e "${BLUE}>>> Important: Before running 'docker compose up -d':${NC}"
+        echo -e "    1. Ensure your domain points to this server's IP address"
+        echo -e "    2. Ports 80 and 443 must be accessible from the internet"
+        echo -e "    3. Let's Encrypt will validate the domain via HTTP challenge"
+        echo -e ""
         echo -e "${BLUE}>>> Note:${NC} Traefik dashboard is bound to 127.0.0.1:8080 by default (not public)."
         echo -e "    To expose it via HTTPS + Basic Auth, use CI/CD variables/secrets and let deploy generate docker-compose.override.yml:"
         echo -e "    - Variable: TRAEFIK_DASHBOARD_DOMAIN"
@@ -188,9 +195,18 @@ EOF
     
     echo -e "${GREEN}Success!${NC}"
     echo -e "Created standalone project in: ${BLUE}$(pwd)${NC}"
-    echo -e "To start it:"
+    echo -e ""
+    echo -e "${YELLOW}Before starting Traefik${NC}, make sure:"
+    echo -e "  1. Your domain DNS records point to this server's IP"
+    echo -e "  2. Ports 80 and 443 are open and forwarded from your firewall"
+    echo -e "  3. Email ($email) is correct for Let's Encrypt notifications"
+    echo -e ""
+    echo -e "To start Traefik:"
     echo -e "  cd $TARGET_DIR"
     echo -e "  docker compose up -d"
+    echo -e ""
+    echo -e "Check logs to verify certificate acquisition:"
+    echo -e "  docker logs traefik -f"
     if [ -f docker-compose.override.yml ]; then
         echo -e "  Dashboard: https://$dashboard_domain/dashboard/ (Don't forget the trailing slash!)"
     fi

@@ -5,19 +5,48 @@ This repository contains the configuration for the main Traefik proxy server. It
 ## Setup
 
 1.  **DNS**: Point your domains (A-records) to this server's IP.
-2.  **Env**: Copy `.env.example` to `.env` and set your email:
-    ```bash
-    cp .env.example .env
-    # Edit .env and set ACME_EMAIL=your-email@example.com
-    ```
-3.  **Permissions**:
-    ```bash
-    chmod 600 traefik/acme.json
-    ```
+2.  **Env**: The `.env` file is automatically created during installation with `ACME_EMAIL` set.
+3.  **acme.json**: Already initialized and permissions set automatically.
 4.  **Run**:
     ```bash
     docker compose up -d
     ```
+
+## Troubleshooting Certificate Issues
+
+### ❌ Certificates Not Being Acquired
+
+If you see errors in the logs about certificate acquisition failing, check:
+
+#### 1. **DNS Resolution**
+   Must resolve to this server's public IP address:
+   ```bash
+   nslookup your-domain.com
+   dig your-domain.com
+   ```
+
+#### 2. **Ports Accessibility**
+   - Port 80 (HTTP) must be accessible from the internet for ACME challenge
+   - Port 443 (HTTPS) must also be open
+   - Check firewall rules and port forwarding
+
+#### 3. **Check Traefik Logs**
+   ```bash
+   docker logs traefik -f
+   ```
+   Look for: `Storing ACME account...` (certificate being requested)
+
+#### 4. **Verify acme.json**
+   ```bash
+   ls -la traefik/acme.json  # Should show -rw------- (600)
+   echo '{}' > traefik/acme.json  # Reinitialize if needed
+   chmod 600 traefik/acme.json
+   docker compose down && docker compose up -d
+   ```
+
+#### 5. **Email Configuration**
+   - Check `.env` has a valid `ACME_EMAIL`
+   - Let's Encrypt sends expiration notices to this email
 
 ## Optional: Traefik Dashboard (HTTPS + Basic Auth)
 
