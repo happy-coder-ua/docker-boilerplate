@@ -28,4 +28,5 @@ services:
 
 networks:
   proxy-public:
-    name: proxy-public
+    external: true
+    name: ${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}

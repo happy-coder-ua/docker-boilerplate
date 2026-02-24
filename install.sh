@@ -170,6 +170,7 @@ setup_traefik() {
     # Write .env (no in-place edits)
     cat > .env <<EOF
 ACME_EMAIL=$email
+TRAEFIK_NETWORK=proxy-public
 EOF
     
     # Initialize acme.json with empty JSON object (Traefik will populate it)
@@ -189,38 +190,10 @@ EOF
         docker run --rm httpd:alpine htpasswd -cb auth.txt "$dashboard_user" "$dashboard_pass" > /dev/null 2>&1
         if [ $? -eq 0 ]; then
             # Copy docker-compose.override.yml from template
-            cp "$TEMPLATES_DIR/traefik/docker-compose.override.yml" . 2>/dev/null || {
-                # If template doesn't exist, create a basic one
-                cat > docker-compose.override.yml <<'OVERRIDE'
-services:
-  traefik:
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.services.dashboard.loadbalancer.server.port=8080"
-      
-      # HTTP to HTTPS redirect
-      - "traefik.http.routers.dashboard-http.rule=Host(\`DOMAIN_PLACEHOLDER\`)"
-      - "traefik.http.routers.dashboard-http.entrypoints=http"
-      - "traefik.http.routers.dashboard-http.middlewares=redirect-https"
-      - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
-      
-      # HTTPS with Basic Auth
-      - "traefik.http.routers.dashboard.rule=Host(\`DOMAIN_PLACEHOLDER\`)"
-      - "traefik.http.routers.dashboard.entrypoints=https"
-      - "traefik.http.routers.dashboard.service=api@internal"
-      - "traefik.http.routers.dashboard.middlewares=auth"
-      - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
-      
-      # Basic Auth middleware
-      - "traefik.http.middlewares.auth.basicauth.usersfile=/auth.txt"
-    
-    volumes:
-      - ./auth.txt:/auth.txt:ro
-OVERRIDE
-            }
+            cp "$TEMPLATES_DIR/traefik/docker-compose.override.yml" .
             
-            # Replace domain placeholder
-            sed -i "s/DOMAIN_PLACEHOLDER/$dashboard_domain/g" docker-compose.override.yml
+            # Add dashboard domain to .env
+            echo "TRAEFIK_DASHBOARD_DOMAIN=$dashboard_domain" >> .env
             
             echo -e "${GREEN}Dashboard configured!${NC}"
             echo -e "Access: ${BLUE}https://$dashboard_domain/dashboard/${NC}"

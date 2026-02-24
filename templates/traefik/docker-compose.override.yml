@@ -5,13 +5,13 @@ services:
       - "traefik.http.services.dashboard.loadbalancer.server.port=8080"
       
       # HTTP to HTTPS redirect
-      - "traefik.http.routers.dashboard-http.rule=Host(`DOMAIN_PLACEHOLDER`)"
+      - "traefik.http.routers.dashboard-http.rule=Host(`${TRAEFIK_DASHBOARD_DOMAIN?TRAEFIK_DASHBOARD_DOMAIN must be set}`)"
       - "traefik.http.routers.dashboard-http.entrypoints=http"
       - "traefik.http.routers.dashboard-http.middlewares=redirect-https"
       - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
       
       # HTTPS with Basic Auth
-      - "traefik.http.routers.dashboard.rule=Host(`DOMAIN_PLACEHOLDER`)"
+      - "traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DASHBOARD_DOMAIN?TRAEFIK_DASHBOARD_DOMAIN must be set}`)"
       - "traefik.http.routers.dashboard.entrypoints=https"
       - "traefik.http.routers.dashboard.service=api@internal"
       - "traefik.http.routers.dashboard.middlewares=auth"
