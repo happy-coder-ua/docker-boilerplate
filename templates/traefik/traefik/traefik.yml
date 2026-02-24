@@ -32,7 +32,6 @@ entryPoints:
 certificatesResolvers:
   myresolver:
     acme:
-      email: "noreply@example.com"
       storage: /acme.json
       httpChallenge:
         entryPoint: http
