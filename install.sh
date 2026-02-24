@@ -176,16 +176,66 @@ EOF
     echo '{}' > traefik/acme.json
     chmod 600 traefik/acme.json
 
-        echo -e "${BLUE}>>> Important: Before running 'docker compose up -d':${NC}"
-        echo -e "    1. Ensure your domain points to this server's IP address"
-        echo -e "    2. Ports 80 and 443 must be accessible from the internet"
-        echo -e "    3. Let's Encrypt will validate the domain via HTTP challenge"
-        echo -e ""
-        echo -e "${BLUE}>>> Note:${NC} Traefik dashboard is bound to 127.0.0.1:8080 by default (not public)."
-        echo -e "    To expose it via HTTPS + Basic Auth, use CI/CD variables/secrets and let deploy generate docker-compose.override.yml:"
-        echo -e "    - Variable: TRAEFIK_DASHBOARD_DOMAIN"
-        echo -e "    - Variable: TRAEFIK_DASHBOARD_BASIC_AUTH_USER"
-        echo -e "    - Secret:   TRAEFIK_DASHBOARD_BASIC_AUTH_PASSWORD"
+    # Ask if user wants to expose dashboard via HTTPS + Basic Auth
+    ask_yes_no "Do you want to expose Traefik dashboard via HTTPS + Basic Auth?"
+    if [ $? -eq 0 ]; then
+        read -p "Enter dashboard domain (e.g., traefik.yourdomain.com): " dashboard_domain
+        read -p "Enter dashboard username: " dashboard_user
+        read -sp "Enter dashboard password: " dashboard_pass
+        echo ""
+        
+        echo -e "${BLUE}>>> Generating Basic Auth credentials...${NC}"
+        # Use Docker to generate bcrypt hash (htpasswd)
+        docker run --rm httpd:alpine htpasswd -cb auth.txt "$dashboard_user" "$dashboard_pass" > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            # Copy docker-compose.override.yml from template
+            cp "$TEMPLATES_DIR/traefik/docker-compose.override.yml" . 2>/dev/null || {
+                # If template doesn't exist, create a basic one
+                cat > docker-compose.override.yml <<'OVERRIDE'
+services:
+  traefik:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=8080"
+      
+      # HTTP to HTTPS redirect
+      - "traefik.http.routers.dashboard-http.rule=Host(\`DOMAIN_PLACEHOLDER\`)"
+      - "traefik.http.routers.dashboard-http.entrypoints=http"
+      - "traefik.http.routers.dashboard-http.middlewares=redirect-https"
+      - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
+      
+      # HTTPS with Basic Auth
+      - "traefik.http.routers.dashboard.rule=Host(\`DOMAIN_PLACEHOLDER\`)"
+      - "traefik.http.routers.dashboard.entrypoints=https"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.middlewares=auth"
+      - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
+      
+      # Basic Auth middleware
+      - "traefik.http.middlewares.auth.basicauth.usersfile=/auth.txt"
+    
+    volumes:
+      - ./auth.txt:/auth.txt:ro
+OVERRIDE
+            }
+            
+            # Replace domain placeholder
+            sed -i "s/DOMAIN_PLACEHOLDER/$dashboard_domain/g" docker-compose.override.yml
+            
+            echo -e "${GREEN}Dashboard configured!${NC}"
+            echo -e "Access: ${BLUE}https://$dashboard_domain/dashboard/${NC}"
+            echo -e "Username: ${BLUE}$dashboard_user${NC}"
+        else
+            echo -e "${RED}Failed to generate auth credentials. Skipping dashboard setup.${NC}"
+            rm -f auth.txt
+        fi
+    fi
+
+    echo -e ""
+    echo -e "${BLUE}>>> Important: Before running 'docker compose up -d':${NC}"
+    echo -e "    1. Ensure your domain points to this server's IP address"
+    echo -e "    2. Ports 80 and 443 must be accessible from the internet"
+    echo -e "    3. Let's Encrypt will validate the domain via HTTP challenge"
     
     # Ensure proxy-public network exists
     if ! docker network inspect proxy-public >/dev/null 2>&1; then
@@ -207,8 +257,11 @@ EOF
     echo -e ""
     echo -e "Check logs to verify certificate acquisition:"
     echo -e "  docker logs traefik -f"
-    if [ -f docker-compose.override.yml ]; then
-        echo -e "  Dashboard: https://$dashboard_domain/dashboard/ (Don't forget the trailing slash!)"
+    if [ -f docker-compose.override.yml ] && [ -f auth.txt ]; then
+        echo -e ""
+        echo -e "${GREEN}Dashboard Access:${NC}"
+        echo -e "  https://$dashboard_domain/dashboard/"
+        echo -e "  (Don't forget the trailing slash!)"
     fi
 }
 
