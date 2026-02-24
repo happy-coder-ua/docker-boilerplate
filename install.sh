@@ -87,6 +87,33 @@ ask_yes_no() {
     return $?
 }
 
+# Helper to add TLS certresolver labels for websecure entry point
+add_tls_certresolver_if_websecure() {
+    local compose_file="$1"
+    local entrypoint="${2:-websecure}"
+    
+    # Only add certresolver for websecure entry point
+    if [ "$entrypoint" != "websecure" ]; then
+        return
+    fi
+    
+    if [ ! -f "$compose_file" ]; then
+        return
+    fi
+    
+    # Use awk to add certresolver label after tls=true lines
+    awk '
+        /traefik\.http\.routers\..*\.tls=true/ {
+            print $0
+            # Get the project name from the previous router rule line
+            # Add the certresolver line with proper indentation
+            print "      - \"traefik.http.routers.${PROJECT_NAME}.tls.certresolver=myresolver\""
+            next
+        }
+        { print }
+    ' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
+}
+
 # Determine mode (Local vs Remote)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 if [ -d "$SCRIPT_DIR/templates" ]; then
@@ -143,6 +170,9 @@ echo -e "${GREEN}>>> Mode: Local Development (only)${NC}"
 echo -e "${BLUE}>>> Generate locally -> push to git -> CI/CD deploys to VPS.${NC}"
 echo ""
 
+# Initialize TRAEFIK_ENTRYPOINT, will be set by setup_traefik if called
+TRAEFIK_ENTRYPOINT="websecure"
+
 # Function to setup Traefik
 setup_traefik() {
     echo -e "\n${BLUE}>>> Generating Global Proxy (Traefik)...${NC}"
@@ -184,9 +214,11 @@ EOF
     
     if [ $install_type -eq 0 ]; then
         echo "TRAEFIK_ENTRYPOINT=http" >> .env
+        TRAEFIK_ENTRYPOINT="http"
         echo -e "${BLUE}Using HTTP entry point for local development${NC}"
     else
         echo "TRAEFIK_ENTRYPOINT=websecure" >> .env
+        TRAEFIK_ENTRYPOINT="websecure"
         echo -e "${BLUE}Using WEBSECURE entry point for production${NC}"
     fi
 
@@ -379,6 +411,7 @@ setup_web() {
     # Copy Docker-related files from template
     cp "$TEMPLATES_DIR/nextjs/Dockerfile" "$folder_name/"
     cp "$TEMPLATES_DIR/nextjs/docker-compose.yml" "$folder_name/"
+    add_tls_certresolver_if_websecure "$folder_name/docker-compose.yml" "$TRAEFIK_ENTRYPOINT"
     cp "$TEMPLATES_DIR/nextjs/.env.example" "$folder_name/"
     cp "$TEMPLATES_DIR/nextjs/README.md" "$folder_name/README-DOCKER.md"
     cp "$TEMPLATES_DIR/nextjs/Makefile" "$folder_name/" 2>/dev/null || true
@@ -388,6 +421,7 @@ setup_web() {
     # Local dev compose (Turbopack is handled by docker-compose.dev.yml command)
     echo -e "${BLUE}>>> Copying docker-compose.dev.yml for local development...${NC}"
     cp "$TEMPLATES_DIR/nextjs/docker-compose.dev.yml" "$folder_name/"
+    add_tls_certresolver_if_websecure "$folder_name/docker-compose.dev.yml" "$TRAEFIK_ENTRYPOINT"
     
     # Ensure proxy-public network exists (in case user skipped Traefik setup)
     # If user specified a custom network, we assume it exists or they will create it.
@@ -502,7 +536,9 @@ setup_vite_react() {
     cp "$TEMPLATES_DIR/vite-react/Dockerfile" "$folder_name/"
     cp "$TEMPLATES_DIR/vite-react/nginx.conf" "$folder_name/"
     cp "$TEMPLATES_DIR/vite-react/docker-compose.yml" "$folder_name/"
+    add_tls_certresolver_if_websecure "$folder_name/docker-compose.yml" "$TRAEFIK_ENTRYPOINT"
     cp "$TEMPLATES_DIR/vite-react/docker-compose.dev.yml" "$folder_name/"
+    add_tls_certresolver_if_websecure "$folder_name/docker-compose.dev.yml" "$TRAEFIK_ENTRYPOINT"
     cp "$TEMPLATES_DIR/vite-react/.env.example" "$folder_name/"
     cp "$TEMPLATES_DIR/vite-react/README.md" "$folder_name/README-DOCKER.md"
     cp "$TEMPLATES_DIR/vite-react/Makefile" "$folder_name/" 2>/dev/null || true
@@ -592,6 +628,16 @@ setup_bot() {
     cd "$folder_name" || exit
     
     project_name_sanitized=$(echo "$folder_name" | tr -cd '[:alnum:]-')
+    
+    # Ask about installation type for this bot project (local vs production)
+    interactive_menu "Bot: Traefik Installation Type" "Local Development (http)" "Production Server (websecure)"
+    bot_traefik_type=$?
+    
+    if [ $bot_traefik_type -eq 0 ]; then
+        bot_entrypoint="http"
+    else
+        bot_entrypoint="websecure"
+    fi
 
     cat > .env <<EOF
 PROJECT_NAME=$project_name_sanitized
@@ -599,7 +645,10 @@ BOT_TOKEN=$bot_token
 DOMAIN_NAME=$domain_name
 TRAEFIK_NETWORK=$traefik_network
 TRAEFIK_ENABLE=false
+TRAEFIK_ENTRYPOINT=$bot_entrypoint
 EOF
+    
+    add_tls_certresolver_if_websecure "docker-compose.yml" "$bot_entrypoint"
 
     # If user provided a domain, assume webhooks via Traefik are desired.
     if [ -n "$domain_name" ]; then
@@ -610,6 +659,7 @@ BOT_TOKEN=$bot_token
 DOMAIN_NAME=$domain_name
 TRAEFIK_NETWORK=$traefik_network
 TRAEFIK_ENABLE=true
+TRAEFIK_ENTRYPOINT=$bot_entrypoint
 EOF
     fi
 
@@ -691,12 +741,25 @@ setup_portainer() {
     cd "$folder_name" || exit
 
     project_name_sanitized=$(echo "$folder_name" | tr -cd '[:alnum:]-')
+    
+    # Ask about installation type for this portainer project (local vs production)
+    interactive_menu "Portainer: Traefik Installation Type" "Local Development (http)" "Production Server (websecure)"
+    portainer_traefik_type=$?
+    
+    if [ $portainer_traefik_type -eq 0 ]; then
+        portainer_entrypoint="http"
+    else
+        portainer_entrypoint="websecure"
+    fi
 
     # Write .env safely (avoid $ expansion in bcrypt hashes)
     : > .env
     printf '%s\n' "PROJECT_NAME=$project_name_sanitized" >> .env
     printf '%s\n' "DOMAIN_NAME=$domain_name" >> .env
     printf '%s\n' "TRAEFIK_NETWORK=$traefik_network" >> .env
+    printf '%s\n' "TRAEFIK_ENTRYPOINT=$portainer_entrypoint" >> .env
+    
+    add_tls_certresolver_if_websecure "docker-compose.yml" "$portainer_entrypoint"
 
         echo -e "${BLUE}>>> Note:${NC} Traefik Basic Auth is configured via CI/CD variables/secrets (recommended)."
         echo -e "    - Variable: PORTAINER_BASIC_AUTH_USER"

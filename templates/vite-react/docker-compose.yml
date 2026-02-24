@@ -13,7 +13,6 @@ services:
       - "traefik.http.routers.${PROJECT_NAME}.rule=Host(`${DOMAIN_NAME?DOMAIN_NAME must be set}`)"
       - "traefik.http.routers.${PROJECT_NAME}.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
       - "traefik.http.routers.${PROJECT_NAME}.tls=true"
-      - "traefik.http.routers.${PROJECT_NAME}.tls.certresolver=myresolver"
       - "traefik.http.services.${PROJECT_NAME}.loadbalancer.server.port=80"
     networks:
       - proxy-public
