@@ -19,6 +19,7 @@ services:
       - "traefik.http.routers.${PROJECT_NAME}-dev.rule=Host(`${DOMAIN_NAME?DOMAIN_NAME must be set}`)"
       - "traefik.http.routers.${PROJECT_NAME}-dev.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
       - "traefik.http.routers.${PROJECT_NAME}-dev.tls=true"
+      - "traefik.http.routers.${PROJECT_NAME}-dev.tls.certresolver=myresolver"
       - "traefik.http.services.${PROJECT_NAME}-dev.loadbalancer.server.port=3000"
       - "traefik.docker.network=${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}"
     networks:
