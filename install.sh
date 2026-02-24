@@ -200,8 +200,10 @@ EOF
         
         echo -e "${BLUE}>>> Generating Basic Auth credentials...${NC}"
         # Use Docker to generate bcrypt hash (htpasswd) and output to host file
-        docker run --rm httpd:alpine htpasswd -cb - "$dashboard_user" "$dashboard_pass" > auth.txt 2>&1
-        if [ $? -eq 0 ] && [ -f auth.txt ] && [ -s auth.txt ]; then
+        # Only capture stdout (the actual hash), not stderr
+        docker run --rm httpd:alpine htpasswd -cb - "$dashboard_user" "$dashboard_pass" > auth.txt
+        htpasswd_exit=$?
+        if [ $htpasswd_exit -eq 0 ] && [ -f auth.txt ] && [ -s auth.txt ]; then
             # Copy docker-compose.override.yml from template
             cp "$TEMPLATES_DIR/traefik/docker-compose.override.yml" .
             

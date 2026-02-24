@@ -30,3 +30,11 @@ entryPoints:
       tls:
         certResolver: myresolver
 
+certificatesResolvers:
+  myresolver:
+    acme:
+      email: placeholder@example.com  # Overridden by --certificatesresolvers.myresolver.acme.email
+      storage: /acme.json
+      httpChallenge:
+        entryPoint: http
+
