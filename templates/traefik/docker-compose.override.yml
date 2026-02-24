@@ -12,7 +12,7 @@ services:
       
       # HTTPS with Basic Auth
       - "traefik.http.routers.dashboard.rule=Host(`${TRAEFIK_DASHBOARD_DOMAIN?TRAEFIK_DASHBOARD_DOMAIN must be set}`)"
-      - "traefik.http.routers.dashboard.entrypoints=https"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
       - "traefik.http.routers.dashboard.service=api@internal"
       - "traefik.http.routers.dashboard.middlewares=auth"
       - "traefik.http.routers.dashboard.tls.certresolver=myresolver"

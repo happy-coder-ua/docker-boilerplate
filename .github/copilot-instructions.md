@@ -21,7 +21,7 @@ This repository is a **generator**, not a deployable app. The only “runtime”
 - **Networking**: services must join an external Traefik network (default `proxy-public`). Compose should keep:
   - `networks: proxy-public: external: true`
   - `name: ${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}`
-- **Traefik labels**: route by host and use `entrypoints=https` (see templates’ `docker-compose.yml`).
+- **Traefik labels**: route by host and use `entrypoints=websecure` (see templates' `docker-compose.yml`).
 
 ## Generator Implementation Notes
 - Project creation uses Dockerized Node tooling (e.g., `node:lts-alpine` + `npm create ...`) to avoid local Node installs.

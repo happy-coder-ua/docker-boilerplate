@@ -178,7 +178,7 @@ deploy:
           echo "      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.regex=^https?://[^/]+/\\$\\$\""
           echo "      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.replacement=https://${DASHBOARD_DOMAIN}/dashboard/\""
           echo "      - \"traefik.http.middlewares.dashboard-redirect.redirectregex.permanent=true\""
-          echo "      - \"traefik.http.routers.dashboard.entrypoints=https\""
+          echo "      - \"traefik.http.routers.dashboard.entrypoints=websecure\""
           echo "      - \"traefik.http.routers.dashboard.tls=true\""
           echo "      - \"traefik.http.routers.dashboard.tls.certresolver=myresolver\""
         } > docker-compose.override.yml
