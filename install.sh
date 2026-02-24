@@ -177,6 +177,19 @@ EOF
     echo '{}' > traefik/acme.json
     chmod 600 traefik/acme.json
 
+    # Ask about installation type (local vs production)
+    echo ""
+    interactive_menu "Traefik Installation Type" "Local Development (http)" "Production Server (websecure)"
+    install_type=$?
+    
+    if [ $install_type -eq 0 ]; then
+        echo "TRAEFIK_ENTRYPOINT=http" >> .env
+        echo -e "${BLUE}Using HTTP entry point for local development${NC}"
+    else
+        echo "TRAEFIK_ENTRYPOINT=websecure" >> .env
+        echo -e "${BLUE}Using WEBSECURE entry point for production${NC}"
+    fi
+
     # Ask if user wants to expose dashboard via HTTPS + Basic Auth
     ask_yes_no "Do you want to expose Traefik dashboard via HTTPS + Basic Auth?"
     if [ $? -eq 0 ]; then
