@@ -200,21 +200,35 @@ EOF
         
         echo -e "${BLUE}>>> Generating Basic Auth credentials...${NC}"
         # Use Docker to generate bcrypt hash (htpasswd) and output to host file
-        # Only capture stdout (the actual hash), suppress informational stderr messages
+        # Capture both exit code and output for debugging
         if ! command -v docker &> /dev/null; then
             echo -e "${RED}Error: docker is not available${NC}"
             echo -e "${YELLOW}You can create auth.txt manually:${NC}"
             echo -e "  docker run --rm httpd:alpine htpasswd -cb - $dashboard_user PASSWORD > auth.txt"
             dashboard_domain=""
         else
-            docker run --rm httpd:alpine htpasswd -cb - "$dashboard_user" "$dashboard_pass" 2>/dev/null > auth.txt
+            # Generate htpasswd - suppress both stdout and stderr to check only exit code
+            docker run --rm httpd:alpine htpasswd -cb - "$dashboard_user" "$dashboard_pass" > auth.txt 2>&1
             htpasswd_exit=$?
+            
+            # Check the generated file
             if [ $htpasswd_exit -ne 0 ]; then
                 echo -e "${RED}Failed to generate auth credentials (exit code: $htpasswd_exit)${NC}"
+                echo -e "${YELLOW}auth.txt contents:${NC}"
+                cat auth.txt 2>/dev/null || echo "  (file not created)"
                 rm -f auth.txt
                 dashboard_domain=""
             elif ! [ -f auth.txt ] || ! [ -s auth.txt ]; then
                 echo -e "${RED}Failed to generate auth credentials (auth.txt empty or missing)${NC}"
+                rm -f auth.txt
+                dashboard_domain=""
+            elif grep -q "^$dashboard_user:" auth.txt; then
+                # Auth file is valid (contains username line)
+                echo -e "${GREEN}Auth credentials generated successfully${NC}"
+            else
+                echo -e "${RED}Auth file format invalid${NC}"
+                echo -e "${YELLOW}auth.txt contents:${NC}"
+                cat auth.txt
                 rm -f auth.txt
                 dashboard_domain=""
             fi
@@ -231,7 +245,9 @@ EOF
             echo -e "Access: ${BLUE}https://$dashboard_domain/dashboard/${NC}"
             echo -e "Username: ${BLUE}$dashboard_user${NC}"
         else
-            echo -e "${RED}Skipping dashboard setup.${NC}"
+            if [ -n "$dashboard_domain" ]; then
+                echo -e "${RED}Skipping dashboard setup due to auth generation failure.${NC}"
+            fi
             rm -f auth.txt
         fi
     fi
