@@ -87,6 +87,16 @@ ask_yes_no() {
     return $?
 }
 
+# Generate random secret with fallback
+generate_secret() {
+    if command -v openssl &> /dev/null; then
+        openssl rand -hex 20
+    else
+        tr -dc 'A-Za-z0-9' </dev/urandom | head -c 40
+        echo ""
+    fi
+}
+
 # Helper to add TLS certresolver labels for websecure entry point
 add_tls_certresolver_if_websecure() {
     local compose_file="$1"
@@ -791,9 +801,130 @@ setup_portainer() {
     echo -e "  4. docker compose up -d"
 }
 
+# Function to setup Nextcloud
+setup_nextcloud() {
+    echo -e "\n${BLUE}>>> Generating Nextcloud Project...${NC}"
+    read -p "Enter project name (folder name): " folder_name
+
+    traefik_network="proxy-public"
+    echo -e "Enter domain for Nextcloud (e.g., cloud.yourdomain.com or ${folder_name}.docker.localhost)."
+    read -p "Domain [${folder_name}.docker.localhost]: " domain_name
+    [ -z "$domain_name" ] && domain_name="${folder_name}.docker.localhost"
+
+    # Network Selection
+    networks=()
+    while IFS= read -r line; do
+        [ -n "$line" ] && networks+=("$line")
+    done < <(docker network ls --format "{{.Name}}" | grep -v "bridge\|host\|none")
+
+    local found_proxy=0
+    for n in "${networks[@]}"; do
+        if [[ "$n" == "proxy-public" ]]; then
+            found_proxy=1
+            break
+        fi
+    done
+
+    if [ $found_proxy -eq 0 ]; then
+        networks+=("proxy-public (Create new)")
+    fi
+    networks+=("Manual Input")
+
+    interactive_menu "Select Docker Network for Traefik" "${networks[@]}"
+    local net_choice=$?
+    local selected="${networks[$net_choice]}"
+
+    if [[ "$selected" == "Manual Input" ]]; then
+         read -p "Enter Docker Network Name: " traefik_network
+    elif [[ "$selected" == "proxy-public (Create new)" ]]; then
+         traefik_network="proxy-public"
+    else
+         traefik_network="$selected"
+    fi
+
+    if [ -d "$folder_name" ]; then
+        ask_yes_no "Directory $folder_name already exists. Remove it and continue?"
+        if [ $? -eq 0 ]; then
+            echo -e "${YELLOW}Removing existing directory...${NC}"
+            docker run --rm -v "$(pwd):/work" -w /work node:lts-alpine rm -rf "$folder_name"
+        else
+            echo -e "${RED}Aborted.${NC}"
+            return
+        fi
+    fi
+
+    cp -r "$TEMPLATES_DIR/nextcloud" "$folder_name"
+    cd "$folder_name" || exit
+
+    project_name_sanitized=$(echo "$folder_name" | tr -cd '[:alnum:]-')
+
+    interactive_menu "Nextcloud: Traefik Installation Type" "Local Development (http)" "Production Server (websecure)"
+    nextcloud_traefik_type=$?
+
+    if [ $nextcloud_traefik_type -eq 0 ]; then
+        nextcloud_entrypoint="http"
+    else
+        nextcloud_entrypoint="websecure"
+    fi
+
+    read -p "Nextcloud admin user [admin]: " nextcloud_admin_user
+    [ -z "$nextcloud_admin_user" ] && nextcloud_admin_user="admin"
+
+    generated_admin_password=$(generate_secret)
+    read -p "Nextcloud admin password [auto-generated]: " nextcloud_admin_password
+    [ -z "$nextcloud_admin_password" ] && nextcloud_admin_password="$generated_admin_password"
+
+    generated_db_password=$(generate_secret)
+    read -p "MySQL app password [auto-generated]: " mysql_password
+    [ -z "$mysql_password" ] && mysql_password="$generated_db_password"
+
+    generated_db_root_password=$(generate_secret)
+    read -p "MySQL root password [auto-generated]: " mysql_root_password
+    [ -z "$mysql_root_password" ] && mysql_root_password="$generated_db_root_password"
+
+    cat > .env <<EOF
+PROJECT_NAME=$project_name_sanitized
+DOMAIN_NAME=$domain_name
+TRAEFIK_NETWORK=$traefik_network
+TRAEFIK_ENTRYPOINT=$nextcloud_entrypoint
+MYSQL_DATABASE=nextcloud
+MYSQL_USER=nextcloud
+MYSQL_PASSWORD=$mysql_password
+MYSQL_ROOT_PASSWORD=$mysql_root_password
+NEXTCLOUD_ADMIN_USER=$nextcloud_admin_user
+NEXTCLOUD_ADMIN_PASSWORD=$nextcloud_admin_password
+TRUSTED_PROXIES=172.16.0.0/12
+OVERWRITEPROTOCOL=https
+OVERWRITECLIURL=https://$domain_name
+EOF
+
+    add_tls_certresolver_if_websecure "docker-compose.yml" "$nextcloud_entrypoint"
+
+    if [ "$traefik_network" == "proxy-public" ]; then
+        if ! docker network inspect proxy-public >/dev/null 2>&1; then
+            echo -e "${BLUE}>>> Creating external network 'proxy-public'...${NC}"
+            docker network create proxy-public
+        fi
+    else
+        if ! docker network inspect "$traefik_network" >/dev/null 2>&1; then
+             echo -e "${YELLOW}Warning: Network '$traefik_network' does not exist. You may need to create it manually.${NC}"
+        fi
+    fi
+
+    git init -q
+
+    echo -e "${GREEN}Success!${NC}"
+    echo -e "Created standalone project in: ${BLUE}$(pwd)${NC}"
+    echo -e "Next steps:"
+    echo -e "  1. cd $folder_name"
+    echo -e "  2. git add ."
+    echo -e "  3. git commit -m 'Initial commit'"
+    echo -e "  4. docker compose up -d"
+}
+
 # Main Menu
 while true; do
-    options=("Global Proxy (Traefik)" "Web Project (Next.js)" "React + Vite Project" "Telegram Bot" "Portainer" "Quit")
+    options=("Global Proxy (Traefik)" "Web Project (Next.js)" "React + Vite Project" "Telegram Bot" "Portainer" "Nextcloud" "Quit")
     interactive_menu "Main Menu" "${options[@]}"
     choice=$?
     
@@ -803,6 +934,7 @@ while true; do
         2) setup_vite_react; break ;;
         3) setup_bot; break ;;
         4) setup_portainer; break ;;
-        5) echo "Exiting..."; exit 0 ;;
+        5) setup_nextcloud; break ;;
+        6) echo "Exiting..."; exit 0 ;;
     esac
 done

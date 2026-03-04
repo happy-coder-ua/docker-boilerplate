@@ -1,0 +1,64 @@
+services:
+  db:
+    image: mariadb:11.4
+    container_name: ${PROJECT_NAME?PROJECT_NAME must be set}-db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-nextcloud}
+      MYSQL_USER: ${MYSQL_USER:-nextcloud}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me-db-pass}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-root-pass}
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    volumes:
+      - db_data:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${PROJECT_NAME?PROJECT_NAME must be set}-redis
+    restart: unless-stopped
+
+  app:
+    image: nextcloud:31-apache
+    container_name: ${PROJECT_NAME?PROJECT_NAME must be set}
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-nextcloud}
+      MYSQL_USER: ${MYSQL_USER:-nextcloud}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me-db-pass}
+      REDIS_HOST: redis
+      NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER:-admin}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD:-change-me-admin-pass}
+      NEXTCLOUD_TRUSTED_DOMAINS: ${DOMAIN_NAME?DOMAIN_NAME must be set}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-172.16.0.0/12}
+      OVERWRITEHOST: ${DOMAIN_NAME?DOMAIN_NAME must be set}
+      OVERWRITEPROTOCOL: ${OVERWRITEPROTOCOL:-https}
+      OVERWRITECLIURL: ${OVERWRITECLIURL:-https://${DOMAIN_NAME?DOMAIN_NAME must be set}}
+    volumes:
+      - nextcloud_data:/var/www/html
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}"
+      - "traefik.http.routers.${PROJECT_NAME}-nextcloud.rule=Host(`${DOMAIN_NAME?DOMAIN_NAME must be set}`)"
+      - "traefik.http.routers.${PROJECT_NAME}-nextcloud.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.${PROJECT_NAME}-nextcloud.tls=true"
+      - "traefik.http.services.${PROJECT_NAME}-nextcloud.loadbalancer.server.port=80"
+    networks:
+      - default
+      - proxy-public
+
+volumes:
+  nextcloud_data:
+  db_data:
+
+networks:
+  proxy-public:
+    external: true
+    name: ${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}

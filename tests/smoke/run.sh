@@ -164,4 +164,29 @@ EOF
 
 validate_compose "$PORTAINER_DIR"
 
+# -------------------- Nextcloud --------------------
+log "Test: templates/nextcloud (overlay + compose config)"
+ensure_proxy_network
+
+NEXTCLOUD_DIR="$TMP/nextcloud-app"
+cp -r "$TEMPLATES_DIR/nextcloud" "$NEXTCLOUD_DIR"
+
+cat >"$NEXTCLOUD_DIR/.env" <<EOF
+PROJECT_NAME=nextcloud-app
+DOMAIN_NAME=nextcloud-app.docker.localhost
+TRAEFIK_NETWORK=proxy-public
+TRAEFIK_ENTRYPOINT=http
+MYSQL_DATABASE=nextcloud
+MYSQL_USER=nextcloud
+MYSQL_PASSWORD=nextcloud-pass
+MYSQL_ROOT_PASSWORD=nextcloud-root-pass
+NEXTCLOUD_ADMIN_USER=admin
+NEXTCLOUD_ADMIN_PASSWORD=admin-pass
+TRUSTED_PROXIES=172.16.0.0/12
+OVERWRITEPROTOCOL=http
+OVERWRITECLIURL=http://nextcloud-app.docker.localhost
+EOF
+
+validate_compose "$NEXTCLOUD_DIR"
+
 log "OK: all template smoke tests passed"
