@@ -922,9 +922,139 @@ EOF
     echo -e "  4. docker compose up -d"
 }
 
+# Function to setup PostgreSQL + pgAdmin
+setup_postgresql() {
+    echo -e "\n${BLUE}>>> Generating PostgreSQL + pgAdmin Project...${NC}"
+    read -p "Enter project name (folder name): " folder_name
+
+    traefik_network="proxy-public"
+    echo -e "Enter domain for pgAdmin (e.g., pgadmin.yourdomain.com or ${folder_name}.docker.localhost)."
+    read -p "Domain [${folder_name}.docker.localhost]: " domain_name
+    [ -z "$domain_name" ] && domain_name="${folder_name}.docker.localhost"
+
+    # Network Selection
+    networks=()
+    while IFS= read -r line; do
+        [ -n "$line" ] && networks+=("$line")
+    done < <(docker network ls --format "{{.Name}}" | grep -v "bridge\|host\|none")
+
+    local found_proxy=0
+    for n in "${networks[@]}"; do
+        if [[ "$n" == "proxy-public" ]]; then
+            found_proxy=1
+            break
+        fi
+    done
+
+    if [ $found_proxy -eq 0 ]; then
+        networks+=("proxy-public (Create new)")
+    fi
+    networks+=("Manual Input")
+
+    interactive_menu "Select Docker Network for Traefik" "${networks[@]}"
+    local net_choice=$?
+    local selected="${networks[$net_choice]}"
+
+    if [[ "$selected" == "Manual Input" ]]; then
+         read -p "Enter Docker Network Name: " traefik_network
+    elif [[ "$selected" == "proxy-public (Create new)" ]]; then
+         traefik_network="proxy-public"
+    else
+         traefik_network="$selected"
+    fi
+
+    if [ -d "$folder_name" ]; then
+        ask_yes_no "Directory $folder_name already exists. Remove it and continue?"
+        if [ $? -eq 0 ]; then
+            echo -e "${YELLOW}Removing existing directory...${NC}"
+            rm -rf "$folder_name"
+        else
+            echo -e "${RED}Aborted.${NC}"
+            return
+        fi
+    fi
+
+    cp -r "$TEMPLATES_DIR/postgresql" "$folder_name"
+    cd "$folder_name" || exit
+
+    project_name_sanitized=$(echo "$folder_name" | tr -cd '[:alnum:]-')
+
+    interactive_menu "PostgreSQL: Traefik Installation Type" "Local Development (http)" "Production Server (websecure)"
+    pg_traefik_type=$?
+
+    if [ $pg_traefik_type -eq 0 ]; then
+        pg_entrypoint="http"
+    else
+        pg_entrypoint="websecure"
+    fi
+
+    read -p "PostgreSQL database name [app]: " postgres_db
+    [ -z "$postgres_db" ] && postgres_db="app"
+
+    read -p "PostgreSQL user [postgres]: " postgres_user
+    [ -z "$postgres_user" ] && postgres_user="postgres"
+
+    generated_pg_password=$(generate_secret)
+    read -p "PostgreSQL password [auto-generated]: " postgres_password
+    [ -z "$postgres_password" ] && postgres_password="$generated_pg_password"
+
+    read -p "PostgreSQL host port [5432]: " postgres_port
+    [ -z "$postgres_port" ] && postgres_port="5432"
+
+    read -p "pgAdmin email: " pgadmin_email
+    while [ -z "$pgadmin_email" ]; do
+        echo -e "${RED}pgAdmin email is required.${NC}"
+        read -p "pgAdmin email: " pgadmin_email
+    done
+
+    generated_pgadmin_password=$(generate_secret)
+    read -p "pgAdmin password [auto-generated]: " pgadmin_password
+    [ -z "$pgadmin_password" ] && pgadmin_password="$generated_pgadmin_password"
+
+    cat > .env <<EOF
+PROJECT_NAME=$project_name_sanitized
+DOMAIN_NAME=$domain_name
+TRAEFIK_NETWORK=$traefik_network
+TRAEFIK_ENTRYPOINT=$pg_entrypoint
+POSTGRES_DB=$postgres_db
+POSTGRES_USER=$postgres_user
+POSTGRES_PASSWORD=$postgres_password
+POSTGRES_PORT=$postgres_port
+PGADMIN_DEFAULT_EMAIL=$pgadmin_email
+PGADMIN_DEFAULT_PASSWORD=$pgadmin_password
+EOF
+
+    add_tls_certresolver_if_websecure "docker-compose.yml" "$pg_entrypoint"
+
+    if [ "$traefik_network" == "proxy-public" ]; then
+        if ! docker network inspect proxy-public >/dev/null 2>&1; then
+            echo -e "${BLUE}>>> Creating external network 'proxy-public'...${NC}"
+            docker network create proxy-public
+        fi
+    else
+        if ! docker network inspect "$traefik_network" >/dev/null 2>&1; then
+             echo -e "${YELLOW}Warning: Network '$traefik_network' does not exist. You may need to create it manually.${NC}"
+        fi
+    fi
+
+    git init -q
+
+    echo -e "${GREEN}Success!${NC}"
+    echo -e "Created standalone project in: ${BLUE}$(pwd)${NC}"
+    echo -e ""
+    echo -e "PostgreSQL is accessible at: ${BLUE}your-server-ip:$postgres_port${NC}"
+    echo -e "pgAdmin is accessible at: ${BLUE}https://$domain_name${NC}"
+    echo -e ""
+    echo -e "Next steps:"
+    echo -e "  1. cd $folder_name"
+    echo -e "  2. git add ."
+    echo -e "  3. git commit -m 'Initial commit'"
+    echo -e "  4. docker compose up -d"
+}
+
 # Main Menu
 while true; do
-    options=("Global Proxy (Traefik)" "Web Project (Next.js)" "React + Vite Project" "Telegram Bot" "Portainer" "Nextcloud" "Quit")
+    options=("Global Proxy (Traefik)" "Web Project (Next.js)" "React + Vite Project" "Telegram Bot" "Portainer" "Nextcloud" "PostgreSQL + pgAdmin" "Quit")
     interactive_menu "Main Menu" "${options[@]}"
     choice=$?
     
@@ -935,6 +1065,7 @@ while true; do
         3) setup_bot; break ;;
         4) setup_portainer; break ;;
         5) setup_nextcloud; break ;;
-        6) echo "Exiting..."; exit 0 ;;
+        6) setup_postgresql; break ;;
+        7) echo "Exiting..."; exit 0 ;;
     esac
 done
