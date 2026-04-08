@@ -2,7 +2,7 @@
 
 This template runs **PostgreSQL** with **pgAdmin** behind **Traefik**.
 
-- PostgreSQL is exposed directly on a host port (default `5432`) for external connections.
+- PostgreSQL is exposed on localhost only (default `127.0.0.1:5432`) for security.
 - pgAdmin is accessible via Traefik with Host routing and TLS.
 
 ## Requirements
@@ -19,7 +19,7 @@ This template runs **PostgreSQL** with **pgAdmin** behind **Traefik**.
 
 Then open: `https://${DOMAIN_NAME}` for pgAdmin.
 
-PostgreSQL is available at `your-server-ip:${POSTGRES_PORT}` (default `5432`).
+PostgreSQL is available at `localhost:${POSTGRES_PORT}` (default `5432`, bound to 127.0.0.1 only).
 
 ## Important env vars
 
