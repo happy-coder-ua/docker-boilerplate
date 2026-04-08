@@ -26,7 +26,6 @@ Follow the interactive menu to:
 *   **Global Proxy**: Create a `global-proxy` folder (Run this once per server).
 *   **Web Project**: Create a new folder (e.g., `my-shop`) with a Next.js app.
 *   **Telegram Bot**: Create a new folder (e.g., `support-bot`) with a Node.js bot.
-*   **Nextcloud**: Create a self-hosted cloud project behind Traefik.
 
 ### Local Development (Optional)
 
