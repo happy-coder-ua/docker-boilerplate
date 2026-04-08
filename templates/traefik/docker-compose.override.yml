@@ -2,6 +2,7 @@ services:
   traefik:
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK?TRAEFIK_NETWORK must be set}"
       - "traefik.http.services.dashboard.loadbalancer.server.port=8080"
       
       # HTTP to HTTPS redirect
